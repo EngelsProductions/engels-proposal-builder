@@ -165,7 +165,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     <div class="grp">
       <h4>Sections — tick to include</h4>
       <div id="sec-toggles"></div>
-      <p class="hint">Drag to reorder. Untick the retainer for a one-off; add a bespoke section for anything new.</p>
+      <p class="hint">Drag to reorder. For a one-off, untick Monthly Retainer Options and tick Project Quote. Add a bespoke section for anything new.</p>
       <button class="btn ghost" id="add-custom">+ Add bespoke section</button>
       <div id="custom-list" style="margin-top:10px;"></div>
     </div>
@@ -174,6 +174,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <h4>Intro copy (editable)</h4>
       <label class="f">Opening line<textarea id="i-lead">OB Private is building a distinctive lifestyle brand across property, travel and the Circle membership community.</textarea></label>
       <label class="f">Body<textarea id="i-about">The brief is short-form cinematic content each month that reflects the OB Private image: considered, premium, and quietly confident. This retainer gives a consistent production presence without being locked into a rigid format — the content mix can shift each month depending on what the business needs.</textarea></label>
+    </div>
+
+    <div class="grp">
+      <h4>Key aspects of the shoot</h4>
+      <label class="f">Intro line<textarea id="i-keyintro">Every shoot is built around a few key aspects that shape how we plan, film and deliver:</textarea></label>
+      <div id="ka-list"></div>
+      <button class="btn ghost" id="add-ka">+ Add key aspect</button>
+      <p class="hint">Shown in a light-blue box. Tick “Key Aspects of the Shoot” above to include it.</p>
     </div>
 
     <div class="grp">
@@ -192,6 +200,19 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f">Videographer day (£)<input type="number" id="r-dop" value="550"></label>
         <label class="f">Editor day (£)<input type="number" id="r-ed" value="350"></label>
       </div>
+    </div>
+
+    <div class="grp">
+      <h4>Project quote (one-off)</h4>
+      <div id="quote-list"></div>
+      <button class="btn ghost" id="add-quote">+ Add line item</button>
+      <div class="row" style="margin-top:12px;">
+        <label class="f">Discount label<input type="text" id="i-disc-label" value="Discount"></label>
+        <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-disc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
+        <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-disc-val" value="0"></label>
+      </div>
+      <div class="calc" id="quote-out"></div>
+      <p class="hint">Tick “Project Quote (one-off)” above to include this instead of the retainer table.</p>
     </div>
 
     <div class="grp">
@@ -215,16 +236,34 @@ document.getElementById('ph-logo').src = LOGO;
 
 // ---- section model ----
 const SECTIONS = [
-  {id:'about',  name:'About This Partnership', on:true},
-  {id:'scope',  name:'Scope, Deliverables & Pricing', on:true},
-  {id:'rates',  name:'Additional Day Rates', on:true},
-  {id:'terms',  name:'Key Terms & Conditions', on:true},
-  {id:'retainer',name:'Ongoing Retainer note', on:false},
-  {id:'next',   name:'Next Steps', on:true},
+  {id:'about',     name:'About This Partnership', on:true},
+  {id:'keyaspects',name:'Key Aspects of the Shoot', on:false},
+  {id:'includes',  name:'What Each Video Includes', on:true},
+  {id:'scope',     name:'Monthly Retainer Options', on:true},
+  {id:'quote',     name:'Project Quote (one-off)', on:false},
+  {id:'rates',     name:'Additional Day Rates', on:true},
+  {id:'terms',     name:'Key Terms & Conditions', on:true},
+  {id:'retainer',  name:'Ongoing Retainer note', on:false},
+  {id:'next',      name:'Next Steps', on:true},
 ];
 let order = SECTIONS.map(s=>s.id);
 let customs = [];   // {title, body}
 let coverSrc = COVER_DEFAULT, coverIsDefault = true;
+
+// editable key aspects + project-quote line items
+const DEFAULT_KEYASPECTS = [
+  {k:'Locations',    v:'Filming across the agreed locations, scheduled around the shoot day.'},
+  {k:'Style',        v:'Cinematic, considered coverage that reflects the brand.'},
+  {k:'Deliverables', v:'Edited films delivered in formats ready for social and web.'},
+];
+const DEFAULT_QUOTEITEMS = [
+  {cat:'Pre-Production',       desc:'Planning, shot-list and scheduling',        rate:550, days:1},
+  {cat:'Creative Development', desc:'Concept and creative direction',            rate:550, days:1},
+  {cat:'Filmmaking',           desc:'On-location filming',                       rate:550, days:2},
+  {cat:'Post-Production',      desc:'Edit, colour grade, music and titles',      rate:350, days:3},
+];
+let keyAspects = DEFAULT_KEYASPECTS.map(a=>({...a}));
+let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
 
 // ---- toggles UI + drag reorder ----
 const togWrap = document.getElementById('sec-toggles');
@@ -269,6 +308,51 @@ function renderCustoms(){
   });
 }
 
+// ---- key aspects (editable list) ----
+document.getElementById('add-ka').onclick=()=>{
+  keyAspects.push({k:'New aspect',v:'Describe this aspect of the shoot.'});
+  renderKeyAspects();render();
+};
+function renderKeyAspects(){
+  const w=document.getElementById('ka-list'); w.innerHTML='';
+  keyAspects.forEach((a,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    d.innerHTML=`<span class="x" title="remove">✕</span>
+      <label class="f">Aspect<input type="text" value="${(a.k||'').replace(/"/g,'&quot;')}"></label>
+      <label class="f">Description<textarea>${a.v}</textarea></label>`;
+    d.querySelector('.x').onclick=()=>{keyAspects.splice(i,1);renderKeyAspects();render();};
+    const [ti,ta]=d.querySelectorAll('input,textarea');
+    ti.oninput=e=>{a.k=e.target.value;render();};
+    ta.oninput=e=>{a.v=e.target.value;render();};
+    w.appendChild(d);
+  });
+}
+
+// ---- project quote line items (editable) ----
+document.getElementById('add-quote').onclick=()=>{
+  quoteItems.push({cat:'Category',desc:'Description of this line',rate:550,days:1});
+  renderQuote();render();
+};
+function renderQuote(){
+  const w=document.getElementById('quote-list'); w.innerHTML='';
+  quoteItems.forEach((it,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    d.innerHTML=`<span class="x" title="remove">✕</span>
+      <label class="f">Category<input type="text" class="q-cat" value="${(it.cat||'').replace(/"/g,'&quot;')}"></label>
+      <label class="f">Description<input type="text" class="q-desc" value="${(it.desc||'').replace(/"/g,'&quot;')}"></label>
+      <div class="row">
+        <label class="f">Day rate (£)<input type="number" class="q-rate" value="${it.rate}"></label>
+        <label class="f">Days<input type="number" class="q-days" value="${it.days}"></label>
+      </div>`;
+    d.querySelector('.x').onclick=()=>{quoteItems.splice(i,1);renderQuote();render();};
+    d.querySelector('.q-cat').oninput=e=>{it.cat=e.target.value;render();};
+    d.querySelector('.q-desc').oninput=e=>{it.desc=e.target.value;render();};
+    d.querySelector('.q-rate').oninput=e=>{it.rate=parseFloat(e.target.value)||0;render();};
+    d.querySelector('.q-days').oninput=e=>{it.days=parseFloat(e.target.value)||0;render();};
+    w.appendChild(d);
+  });
+}
+
 // ---- cover upload ----
 document.getElementById('i-cover').onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
@@ -299,6 +383,20 @@ function renderCalc(){
    `Effective rate — Tier A <b>${gbp(c.aeff)}</b>/video · Tier B <b>${gbp(c.beff)}</b>/video<br>
     Saving vs ad-hoc — A <b>${gbp(c.asav)}</b> · B <b>${gbp(c.bsav)}</b> per month`;
 }
+// ---- project quote calc ----
+function quoteCalc(){
+  const subtotal=quoteItems.reduce((s,it)=>s+((+it.rate||0)*(+it.days||0)),0);
+  const type=val('i-disc-type'), dv=num('i-disc-val');
+  const discAmount = type==='pct' ? subtotal*dv/100 : dv;
+  const grand = Math.max(0, subtotal-discAmount);
+  return {subtotal, discType:type, discVal:dv, discAmount, grand, discLabel:val('i-disc-label')};
+}
+function renderQuoteCalc(){
+  const el=document.getElementById('quote-out'); if(!el) return;
+  const q=quoteCalc();
+  const dtxt = q.discAmount>0 ? ` · ${esc(q.discLabel)} −<b>${gbp(q.discAmount)}</b>` : '';
+  el.innerHTML=`Subtotal <b>${gbp(q.subtotal)}</b>${dtxt}<br>Grand total <b>${gbp(q.grand)}</b> · ${quoteItems.length} line${quoteItems.length===1?'':'s'}`;
+}
 
 // ---- section renderers ----
 function secHTML(id){
@@ -307,15 +405,19 @@ function secHTML(id){
    case 'about': return `<div class="bar">ABOUT THIS PARTNERSHIP</div>
       <p><span class="lead">${esc(val('i-lead'))}</span></p>
       <p>${esc(val('i-about'))}</p>`;
-   case 'scope': return `<div class="bar mt">SCOPE, DELIVERABLES &amp; PRICING</div>
-      <h3 class="sub">What each video includes</h3>
+   case 'keyaspects': return `<div class="bar mt">KEY ASPECTS OF THE SHOOT</div>
+      ${val('i-keyintro').trim()?`<p>${esc(val('i-keyintro'))}</p>`:''}
+      <div class="callout">
+        ${keyAspects.map(a=>`<p><span class="k">${esc(a.k)}:</span> ${esc(a.v)}</p>`).join('')}
+      </div>`;
+   case 'includes': return `<div class="bar mt">WHAT EACH VIDEO INCLUDES</div>
       <div class="callout">
         <p><span class="k">Pre-Production:</span> Planning and shot-list prep ahead of every shoot.</p>
         <p><span class="k">Production:</span> On-location filming with professional audio, lighting and a two-camera setup where applicable.</p>
         <p><span class="k">Post-Production:</span> Full edit with colour grade, music and titles.</p>
         <p><span class="k">Revisions:</span> Two rounds included, delivered in formats ready for social and web.</p>
-      </div>
-      <h3 class="sub">Monthly retainer options</h3>
+      </div>`;
+   case 'scope': return `<div class="bar mt">MONTHLY RETAINER OPTIONS</div>
       <table class="price"><thead><tr>
         <th class="rh">&nbsp;</th><th class="c">Ad Hoc</th><th class="c">${c.an} / month</th><th class="c">${c.bn} / month</th>
       </tr></thead><tbody>
@@ -324,6 +426,17 @@ function secHTML(id){
         <tr><th class="rh">Saving vs ad hoc</th><td class="c">—</td><td class="c save">Save ${gbp(c.asav)}/mo</td><td class="c save">Save ${gbp(c.bsav)}/mo</td></tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Prices subject to T&amp;Cs, travel expenses and changes to scope. Creative direction billed separately by Sigrid Media.</p>`;
+   case 'quote': { const q=quoteCalc();
+      return `<div class="bar mt">PROJECT QUOTE</div>
+      <table class="price"><thead><tr>
+        <th>Category</th><th>Description</th><th class="c">Day rate</th><th class="c">Days</th><th class="c">Total</th>
+      </tr></thead><tbody>
+        ${quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td><td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td><td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`).join('')}
+        ${q.discAmount>0?`<tr class="rate"><th class="rh" colspan="4" style="text-align:right;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
+        <tr><td colspan="4" style="text-align:right;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
+        <tr class="total"><td colspan="4" style="text-align:right;">${q.discAmount>0?'Grand total':'Total'}</td><td class="c">${gbp(q.grand)}</td></tr>
+      </tbody></table>
+      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`; }
    case 'rates': return `<div class="bar mt">ADDITIONAL DAY RATES</div>
       <p style="font-size:9.8pt;">Work outside the agreed monthly scope is scoped and quoted in advance at the following day rates, so you always know the cost before anything begins.</p>
       <table class="rates"><thead><tr><th>Role</th><th style="text-align:right;">Day rate (7 hrs)</th></tr></thead><tbody>
@@ -348,7 +461,7 @@ function secHTML(id){
 
 // ---- main render: paginate sections across pages ----
 function render(){
-  renderCalc();
+  renderCalc(); renderQuoteCalc();
   const active = order.filter(id=>SECTIONS.find(s=>s.id===id).on).map(id=>secHTML(id));
   customs.forEach(c=>active.push(`<div class="bar mt">${esc(c.title)}</div><p>${esc(c.body)}</p>`));
 
@@ -373,7 +486,7 @@ function render(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed'];
+const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -382,6 +495,7 @@ function snapshot(){
   const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
   const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
   return {inputs, toggles, order:[...order], customs:clone(customs),
+          keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
 function applyState(st){
@@ -391,10 +505,12 @@ function applyState(st){
   order = Array.isArray(st.order)&&st.order.length ? st.order.filter(id=>SECTIONS.find(s=>s.id===id)) : SECTIONS.map(s=>s.id);
   SECTIONS.forEach(s=>{ if(!order.includes(s.id)) order.push(s.id); });
   customs = Array.isArray(st.customs) ? clone(st.customs) : [];
+  keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
+  quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
   coverIsDefault = st.coverIsDefault!==false;
   coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
   document.getElementById('i-cover').value='';
-  renderToggles(); renderCustoms(); render();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); render();
 }
 function loadStore(){
   try{ drafts=JSON.parse(localStorage.getItem(DKEY))||[]; }catch(e){ drafts=[]; }
@@ -494,8 +610,9 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
   .forEach(el=>el.addEventListener('input',render));
+document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
 
 // ---- init: capture pristine defaults, then load saved drafts ----
@@ -505,7 +622,7 @@ if(drafts.length){
   const cur=drafts.find(d=>d.id===currentId)||drafts[0];
   currentId=cur.id; applyState(cur.state);
 }else{
-  renderToggles(); renderCustoms(); render();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); render();
   newDraft(clone(DEFAULT_STATE), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
