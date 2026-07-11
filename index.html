@@ -73,7 +73,7 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .c-top{background:var(--navy);text-align:center;padding:7mm 10mm 2mm;}
 .c-logo{width:72%;max-width:150mm;margin:0 auto;overflow:hidden;line-height:0;}
 .c-logo img{width:100%;height:auto;display:block;margin:-8.6% 0;}
-.c-title{background:var(--navy);color:#fff;text-align:center;padding:0 0 5mm;}
+.c-title{position:absolute;top:0;left:0;right:0;z-index:3;background:rgba(10,10,44,.58);color:#fff;text-align:center;padding:6mm 0;}
 .c-title span{display:inline-block;border-top:1px solid rgba(52,179,229,.4);border-bottom:1px solid rgba(52,179,229,.4);padding:8pt 26pt;font-size:15.5pt;font-weight:400;letter-spacing:.08em;}
 .c-photo{flex:1;position:relative;overflow:hidden;background:#0d1745;}
 .c-photo img{width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(1) contrast(1.02);}
@@ -468,8 +468,7 @@ function render(){
   // cover
   let html = `<section class="pg cover">
       <div class="c-top"><div class="c-logo"><img src="${LOGO}"></div></div>
-      <div class="c-title"><span>${esc(val('i-title'))}</span></div>
-      <div class="c-photo ${coverIsDefault?'':'plain'}"><img src="${coverSrc}"></div>
+      <div class="c-photo ${coverIsDefault?'':'plain'}"><img src="${coverSrc}"><div class="c-title"><span>${esc(val('i-title'))}</span></div></div>
       <div class="c-client"><h2>${esc(val('i-client'))}</h2><div class="d">${esc(val('i-date'))}</div></div>
     </section>`;
 
