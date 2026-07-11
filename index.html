@@ -47,6 +47,13 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .calc b{color:#fff;}
 .customsec{background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;padding:11px;margin-bottom:10px;}
 .customsec .x{float:right;color:#8a93c9;cursor:pointer;font-size:13px;}
+.draft{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;margin-bottom:8px;font-size:12.5px;}
+.draft.active{border-color:var(--blue);}
+.draft .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
+.draft.active .nm{color:#fff;font-weight:500;}
+.draft .dt{font-size:9.5px;color:#7d8fce;white-space:nowrap;}
+.draft .ic{color:#8a93c9;cursor:pointer;font-size:12px;padding:0 1px;}
+.draft .ic:hover{color:#fff;}
 
 /* ---------------- preview ---------------- */
 .stage{overflow-y:auto;padding:28px 28px 60px;background:#dfe3ea;}
@@ -130,6 +137,18 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     <div class="panel-head">
       <img id="ph-logo" alt="Engels"/>
       <div class="ttl">Proposal Builder<span>ENGELS PRODUCTIONS</span></div>
+    </div>
+
+    <div class="grp">
+      <h4>Drafts</h4>
+      <div id="draft-list"></div>
+      <button class="btn ghost" id="draft-new">+ New proposal</button>
+      <div class="row" style="margin-top:9px;">
+        <button class="btn ghost" id="draft-dup">Duplicate</button>
+        <button class="btn ghost" id="draft-download">Download</button>
+      </div>
+      <label class="btn ghost" style="margin-top:9px;cursor:pointer;">Import draft<input type="file" id="draft-import" accept="application/json,.json" hidden></label>
+      <p class="hint" id="draft-status">Drafts auto-save to this browser — close and reopen any time.</p>
     </div>
 
     <div class="grp">
@@ -252,7 +271,9 @@ function renderCustoms(){
 // ---- cover upload ----
 document.getElementById('i-cover').onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
-  const r=new FileReader(); r.onload=()=>{coverSrc=r.result;coverIsDefault=false;render();}; r.readAsDataURL(f);
+  const r=new FileReader();
+  r.onload=()=>downscale(r.result,2200,0.82,out=>{coverSrc=out;coverIsDefault=false;render();});
+  r.readAsDataURL(f);
 };
 
 // ---- helpers ----
@@ -347,14 +368,146 @@ function render(){
   }
   document.getElementById('preview').innerHTML=html;
   document.getElementById('pgcount').textContent=pageNo+' pages';
+  scheduleSave();
 }
+
+// ================= DRAFTS — saved to this browser =================
+const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed'];
+const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
+let drafts=[], currentId=null, saveTimer=null;
+const clone=o=>JSON.parse(JSON.stringify(o));
+
+function snapshot(){
+  const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
+  const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
+  return {inputs, toggles, order:[...order], customs:clone(customs),
+          coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
+}
+function applyState(st){
+  st=st||{};
+  INPUT_IDS.forEach(id=>{ if(st.inputs && id in st.inputs) document.getElementById(id).value=st.inputs[id]; });
+  if(st.toggles) SECTIONS.forEach(s=>{ if(s.id in st.toggles) s.on=st.toggles[s.id]; });
+  order = Array.isArray(st.order)&&st.order.length ? st.order.filter(id=>SECTIONS.find(s=>s.id===id)) : SECTIONS.map(s=>s.id);
+  SECTIONS.forEach(s=>{ if(!order.includes(s.id)) order.push(s.id); });
+  customs = Array.isArray(st.customs) ? clone(st.customs) : [];
+  coverIsDefault = st.coverIsDefault!==false;
+  coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
+  document.getElementById('i-cover').value='';
+  renderToggles(); renderCustoms(); render();
+}
+function loadStore(){
+  try{ drafts=JSON.parse(localStorage.getItem(DKEY))||[]; }catch(e){ drafts=[]; }
+  if(!Array.isArray(drafts)) drafts=[];
+  currentId=localStorage.getItem(CKEY)||null;
+}
+function persist(){
+  try{ localStorage.setItem(DKEY,JSON.stringify(drafts)); localStorage.setItem(CKEY,currentId||'');
+       setStatus('All changes saved · '+timeStr(Date.now())); }
+  catch(e){ setStatus('⚠ Browser storage is full — use Download to back up, then delete old drafts.'); }
+}
+function setStatus(t){ const el=document.getElementById('draft-status'); if(el) el.textContent=t; }
+function timeStr(t){ if(!t) return ''; const d=new Date(t);
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
+function uid(){ return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(commitCurrent,400); }
+function commitCurrent(){
+  const d=drafts.find(x=>x.id===currentId); if(!d) return;
+  d.state=snapshot(); d.updated=Date.now();
+  if(d.auto && val('i-client').trim()) d.name=val('i-client').trim();
+  persist(); renderDrafts();
+}
+function newDraft(state,name,manual){
+  const d={id:uid(), name:name||'Untitled proposal', auto:!manual, updated:Date.now(), state:state||snapshot()};
+  drafts.unshift(d); currentId=d.id; persist(); renderDrafts(); return d;
+}
+function switchDraft(id){
+  if(id===currentId) return;
+  commitCurrent();
+  const d=drafts.find(x=>x.id===id); if(!d) return;
+  currentId=id; applyState(d.state); persist(); renderDrafts();
+}
+function duplicateDraft(){
+  commitCurrent();
+  const cur=drafts.find(x=>x.id===currentId);
+  newDraft(snapshot(), ((cur&&cur.name)||'Proposal')+' copy', true);
+}
+function deleteDraft(id){
+  const d=drafts.find(x=>x.id===id); if(!d) return;
+  if(!confirm('Delete “'+d.name+'”? This cannot be undone.')) return;
+  drafts=drafts.filter(x=>x.id!==id);
+  if(currentId===id){
+    if(drafts.length){ currentId=drafts[0].id; applyState(drafts[0].state); }
+    else { applyState(clone(DEFAULT_STATE)); newDraft(clone(DEFAULT_STATE),'Untitled proposal'); return; }
+  }
+  persist(); renderDrafts();
+}
+function renameDraft(id){
+  const d=drafts.find(x=>x.id===id); if(!d) return;
+  const n=prompt('Draft name', d.name); if(n===null) return;
+  d.name=n.trim()||d.name; d.auto=false; persist(); renderDrafts();
+}
+function renderDrafts(){
+  const w=document.getElementById('draft-list'); if(!w) return; w.innerHTML='';
+  drafts.forEach(d=>{
+    const el=document.createElement('div'); el.className='draft'+(d.id===currentId?' active':'');
+    el.innerHTML=`<span class="nm">${esc(d.name)}</span><span class="dt">${timeStr(d.updated)}</span>`+
+      `<span class="ic rn" title="Rename">✎</span><span class="ic del" title="Delete">✕</span>`;
+    el.querySelector('.nm').onclick=()=>switchDraft(d.id);
+    el.querySelector('.rn').onclick=e=>{e.stopPropagation();renameDraft(d.id);};
+    el.querySelector('.del').onclick=e=>{e.stopPropagation();deleteDraft(d.id);};
+    w.appendChild(el);
+  });
+}
+function downloadDraft(){
+  commitCurrent();
+  const d=drafts.find(x=>x.id===currentId)||{name:'proposal',state:snapshot()};
+  const payload={type:'engels-proposal-draft', name:d.name, exported:Date.now(), state:d.state};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=((d.name||'proposal').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'proposal')+'.epdraft.json';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+function importDraft(file){
+  const r=new FileReader();
+  r.onload=()=>{ try{ const obj=JSON.parse(r.result); const st=obj.state||obj;
+      if(!st || typeof st!=='object' || !st.inputs) throw 0;
+      const d=newDraft(clone(st), obj.name||val('i-client')||'Imported proposal', true);
+      applyState(d.state);
+    }catch(e){ alert('That file could not be read as an Engels proposal draft.'); } };
+  r.readAsText(file);
+}
+function downscale(dataUrl,maxW,q,cb){
+  const img=new Image();
+  img.onload=()=>{ let w=img.naturalWidth,h=img.naturalHeight;
+    if(w>maxW){ h=Math.round(h*maxW/w); w=maxW; }
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    try{ cb(c.toDataURL('image/jpeg',q)); }catch(err){ cb(dataUrl); } };
+  img.onerror=()=>cb(dataUrl); img.src=dataUrl;
+}
+
+document.getElementById('draft-new').onclick=()=>{ applyState(clone(DEFAULT_STATE)); newDraft(clone(DEFAULT_STATE),'Untitled proposal'); };
+document.getElementById('draft-dup').onclick=duplicateDraft;
+document.getElementById('draft-download').onclick=downloadDraft;
+document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
 document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed')
   .forEach(el=>el.addEventListener('input',render));
 document.getElementById('btn-print').onclick=()=>window.print();
 
-renderToggles(); renderCustoms(); render();
+// ---- init: capture pristine defaults, then load saved drafts ----
+const DEFAULT_STATE = snapshot();
+loadStore();
+if(drafts.length){
+  const cur=drafts.find(d=>d.id===currentId)||drafts[0];
+  currentId=cur.id; applyState(cur.state);
+}else{
+  renderToggles(); renderCustoms(); render();
+  newDraft(clone(DEFAULT_STATE), val('i-client')||'Untitled proposal');
+}
+renderDrafts();
 </script>
 </body>
 </html>

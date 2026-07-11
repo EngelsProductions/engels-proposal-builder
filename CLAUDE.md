@@ -44,7 +44,10 @@ The whole point of this tool is that the design is LOCKED so proposals never loo
 ## Making changes
 
 - Edit `index.html` directly. Keep everything in the one file.
-- Do NOT add localStorage/sessionStorage — the tool holds state in memory only.
+- localStorage persists ONLY the saved drafts (the Drafts panel — keys `ep_drafts_v1`
+  and `ep_current_v1`). Everything else stays in memory; a browser with no saved drafts
+  starts from the built-in defaults. Do not use storage for anything beyond drafts.
+  Uploaded cover photos are downscaled (max 2200px, JPEG) so drafts fit the storage quota.
 - After editing, show the diff, then commit and push to `main`. Vercel redeploys.
 - Suggested commit style: short imperative summary, e.g. "Add event-coverage section".
 - Before big structural changes, note that the current version is recoverable via
