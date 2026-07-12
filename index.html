@@ -111,8 +111,8 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 .terms p{font-size:10pt;margin:0 0 3pt;line-height:1.6;}
 .klead{font-weight:700;color:var(--navy);margin:0 0 4pt;}
 .toc{margin-top:2pt;}
-.toc-row{display:flex;align-items:baseline;gap:14pt;padding:7.5pt 2pt;border-bottom:1px solid var(--line);font-size:11pt;color:var(--navy);font-weight:500;}
-.toc-n{color:var(--blue);font-weight:700;font-size:9.5pt;min-width:20pt;}
+.toc-row{display:flex;align-items:baseline;justify-content:space-between;gap:14pt;padding:7.5pt 2pt;border-bottom:1px solid var(--line);font-size:11pt;color:var(--navy);font-weight:500;}
+.toc-pg{color:var(--blue);font-weight:700;font-size:10.5pt;}
 .sig .sigimg{height:81px;display:block;margin:3pt 0 5pt -6mm;}
 .sig .n{font-weight:700;color:var(--navy);font-size:11pt;}
 .sig .co{font-size:9.5pt;color:var(--ink-soft);}
@@ -498,10 +498,10 @@ function secHTML(id){
   switch(id){
    case 'toc': {
       const entries=[];
-      order.forEach(id=>{ const s=SECTIONS.find(x=>x.id===id); if(s&&s.on&&HEADERS[id]) entries.push(HEADERS[id]); });
-      customs.forEach(cu=>{ if((cu.title||'').trim()) entries.push(cu.title); });
+      order.forEach(id=>{ const s=SECTIONS.find(x=>x.id===id); if(s&&s.on&&HEADERS[id]) entries.push({label:HEADERS[id], page:pageOf[id]}); });
+      customs.forEach((cu,idx)=>{ if((cu.title||'').trim()) entries.push({label:cu.title, page:pageOf['custom'+idx]}); });
       return `<div class="bar">CONTENTS</div>
-      <div class="toc">${entries.map((e,i)=>`<div class="toc-row"><span class="toc-n">${String(i+1).padStart(2,'0')}</span><span>${esc(e)}</span></div>`).join('')}</div>`;
+      <div class="toc">${entries.map(e=>`<div class="toc-row"><span class="toc-lbl">${esc(e.label)}</span><span class="toc-pg">${e.page||''}</span></div>`).join('')}</div>`;
    }
    case 'about': return `<div class="bar mt">ABOUT THIS PARTNERSHIP</div>
       <p><span class="lead">${esc(val('i-lead'))}</span></p>
@@ -569,28 +569,64 @@ function secHTML(id){
 }
 
 // ---- main render: paginate sections across pages ----
+let pageOf = {};
 function render(){
   renderCalc(); renderQuoteCalc();
-  const active = order.filter(id=>SECTIONS.find(s=>s.id===id).on).map(id=>secHTML(id));
-  customs.forEach(c=>active.push(`<div class="bar mt">${esc(c.title)}</div><p>${esc(c.body)}</p>`));
+  const activeIds = order.filter(id=>SECTIONS.find(s=>s.id===id).on);
+  const build=()=>{
+    const bl = activeIds.map(id=>({id, html:secHTML(id)}));
+    customs.forEach((c,idx)=>bl.push({id:'custom'+idx, html:`<div class="bar mt">${esc(c.title)}</div><p>${esc(c.body)}</p>`}));
+    return bl;
+  };
+  let blocks = build();
+  const pageH = availablePageHeight();
+  measureBlocks(blocks);
+  paginateInto(blocks, pageH);          // pass 1: work out which page each section lands on
+  const tocB = blocks.find(b=>b.id==='toc');
+  if(tocB) tocB.html = secHTML('toc');  // rebuild contents list with real page numbers (same height)
+  const pages = paginateInto(blocks, pageH);
 
-  // cover
   let html = `<section class="pg cover">
       <div class="c-top"><div class="c-logo"><img src="${LOGO}"></div></div>
       <div class="c-photo ${coverIsDefault?'':'plain'}"><img src="${coverSrc}"><div class="c-title"><span>${esc(val('i-title'))}</span></div></div>
       <div class="c-client"><h2>${esc(val('i-client'))}</h2><div class="d">${esc(val('i-date'))}</div></div>
     </section>`;
-
-  // simple pagination: ~2 major blocks per page
-  const perPage=2; let pageNo=1;
-  for(let i=0;i<active.length;i+=perPage){
-    pageNo++;
-    const chunk=active.slice(i,i+perPage).join('');
-    html+=`<section class="pg"><div class="pv-body">${chunk}</div>${footer(pageNo)}</section>`;
-  }
-  document.getElementById('preview').innerHTML=html;
-  document.getElementById('pgcount').textContent=pageNo+' pages';
+  pages.forEach((pg,i)=>{ html += `<section class="pg"><div class="pv-body">${pg.map(b=>b.html).join('')}</div>${footer(i+2)}</section>`; });
+  document.getElementById('preview').innerHTML = html;
+  document.getElementById('pgcount').textContent = (pages.length+1)+' pages';
   scheduleSave();
+}
+// greedily pack whole sections onto pages — a section only starts a new page if it won't fit on the current one
+function paginateInto(blocks, pageH){
+  pageOf = {};
+  const pages=[]; let cur=[], curH=0, pageNo=2;
+  blocks.forEach(b=>{
+    if(cur.length>0 && curH + b.h > pageH){ pages.push(cur); cur=[]; curH=0; pageNo++; }
+    cur.push(b); curH += b.h; pageOf[b.id]=pageNo;
+  });
+  if(cur.length) pages.push(cur);
+  return pages;
+}
+// measure each block's rendered height at the real content width (flow-root contains inner margins)
+function measureBlocks(blocks){
+  const holder=document.createElement('div');
+  holder.style.cssText='position:absolute;left:-99999px;top:0;visibility:hidden;';
+  holder.innerHTML=`<div class="pg" style="display:block;width:180mm;min-height:0;height:auto;padding:0;box-shadow:none;">${
+    blocks.map(b=>`<div style="display:flow-root;">${b.html}</div>`).join('')}</div>`;
+  document.body.appendChild(holder);
+  const kids=[...holder.firstElementChild.children];
+  blocks.forEach((b,i)=>{ b.h = kids[i]?kids[i].offsetHeight:0; });
+  document.body.removeChild(holder);
+}
+function availablePageHeight(){
+  const mm2px=96/25.4;
+  const holder=document.createElement('div');
+  holder.style.cssText='position:absolute;left:-99999px;top:0;visibility:hidden;';
+  holder.innerHTML=`<div class="pg" style="display:block;width:180mm;min-height:0;height:auto;padding:0;box-shadow:none;">${footer(2)}</div>`;
+  document.body.appendChild(holder);
+  const footerH=holder.firstElementChild.offsetHeight;
+  document.body.removeChild(holder);
+  return (297-16-12)*mm2px - footerH - 6;   // page content area minus footer, small safety margin
 }
 
 // ================= DRAFTS — saved to this browser =================
@@ -602,7 +638,7 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 function snapshot(){
   const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
   const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
-  return {inputs, toggles, order:[...order], customs:clone(customs),
+  return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
           keyAspects:clone(keyAspects), quoteItems:clone(quoteItems), quoteTiers:clone(quoteTiers),
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
@@ -611,8 +647,16 @@ function applyState(st){
   st=st||{};
   INPUT_IDS.forEach(id=>{ if(st.inputs && id in st.inputs) document.getElementById(id).value=st.inputs[id]; });
   if(st.toggles) SECTIONS.forEach(s=>{ if(s.id in st.toggles) s.on=st.toggles[s.id]; });
-  order = Array.isArray(st.order)&&st.order.length ? st.order.filter(id=>SECTIONS.find(s=>s.id===id)) : SECTIONS.map(s=>s.id);
-  SECTIONS.forEach(s=>{ if(!order.includes(s.id)) order.push(s.id); });
+  // v2 drafts keep their saved order; older drafts are reset to the natural template order once
+  order = (st.ov===2 && Array.isArray(st.order) && st.order.length)
+    ? st.order.filter(id=>SECTIONS.find(s=>s.id===id))
+    : SECTIONS.map(s=>s.id);
+  SECTIONS.forEach((s,idx)=>{
+    if(order.includes(s.id)) return;
+    let insertAt=0;
+    for(let j=idx-1;j>=0;j--){ const pos=order.indexOf(SECTIONS[j].id); if(pos>=0){ insertAt=pos+1; break; } }
+    order.splice(insertAt,0,s.id);
+  });
   customs = Array.isArray(st.customs) ? clone(st.customs) : [];
   keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
   quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
