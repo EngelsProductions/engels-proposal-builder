@@ -67,14 +67,14 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .pg.cover{padding:0;overflow:hidden;background:var(--navy);height:297mm;min-height:297mm;}
 .pv-body{flex:1 1 auto;}
 .pg h1,.pg h2,.pg h3,.pg h4{font-family:"Poppins";margin:0;color:var(--navy);}
-.pg p{font-size:10.5pt;line-height:1.62;margin:0 0 9pt;color:var(--ink);}
+.pg p{font-size:10pt;line-height:1.6;margin:0 0 9pt;color:var(--ink);}
 
 /* cover */
-.c-top{background:var(--navy);text-align:center;padding:7mm 10mm 2mm;}
-.c-logo{width:72%;max-width:150mm;margin:0 auto;overflow:hidden;line-height:0;}
+.c-top{background:var(--navy);text-align:center;padding:6mm 10mm 2mm;}
+.c-logo{width:54%;max-width:112mm;margin:0 auto;overflow:hidden;line-height:0;}
 .c-logo img{width:100%;height:auto;display:block;margin:-8.6% 0;}
 .c-title{position:absolute;top:0;left:0;right:0;z-index:3;background:rgba(10,10,44,.58);color:#fff;text-align:center;padding:6mm 0;}
-.c-title span{display:inline-block;border-top:1px solid rgba(52,179,229,.4);border-bottom:1px solid rgba(52,179,229,.4);padding:8pt 26pt;font-size:15.5pt;font-weight:400;letter-spacing:.08em;}
+.c-title span{display:inline-block;padding:2pt 26pt;font-size:15.5pt;font-weight:400;letter-spacing:.08em;}
 .c-photo{flex:1;position:relative;overflow:hidden;background:#0d1745;}
 .c-photo img{width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(1) contrast(1.02);}
 .c-photo::after{content:"";position:absolute;inset:0;background:
@@ -90,7 +90,7 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .bar.mt{margin-top:18pt;}
 .lead{color:var(--navy);font-weight:500;}
 .callout{background:var(--box);color:#fff;border-radius:8px;padding:13pt 16pt 5pt;margin:6pt 0 12pt;}
-.callout p{color:#fff;font-size:9.6pt;line-height:1.5;margin:0 0 9pt;}
+.callout p{color:#fff;font-size:10pt;line-height:1.6;margin:0 0 9pt;}
 .callout .k{font-weight:700;text-decoration:underline;text-decoration-color:rgba(255,255,255,.5);text-underline-offset:2px;}
 table.price{width:100%;border-collapse:collapse;margin:4pt 0 4pt;font-size:9.4pt;}
 table.price th,table.price td{padding:7pt 10pt;border-bottom:1px solid var(--line);text-align:left;}
@@ -105,10 +105,10 @@ table.rates{width:100%;border-collapse:collapse;margin:5pt 0;font-size:9.5pt;}
 table.rates th,table.rates td{padding:6.5pt 12pt;border-bottom:1px solid var(--line);text-align:left;}
 table.rates thead th{background:var(--navy);color:#fff;font-weight:600;}
 table.rates td.r{text-align:right;font-weight:600;color:var(--navy);}
-.note{font-size:8.3pt;color:var(--ink-soft);font-style:italic;line-height:1.5;margin:5pt 0 0;}
+.note{font-size:10pt;color:var(--ink);line-height:1.6;margin:9pt 0 0;}
 h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
-.terms h4{font-size:10pt;font-weight:600;color:var(--navy);margin:10pt 0 2pt;}
-.terms p{font-size:9.6pt;margin:0 0 3pt;line-height:1.5;}
+.terms h4{font-size:11pt;font-weight:600;color:var(--navy);margin:11pt 0 3pt;}
+.terms p{font-size:10pt;margin:0 0 3pt;line-height:1.6;}
 .sig .sigimg{height:81px;display:block;margin:3pt 0 5pt;}
 .sig .n{font-weight:700;color:var(--navy);font-size:11pt;}
 .sig .co{font-size:9.5pt;color:var(--ink-soft);}
@@ -154,7 +154,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     <div class="grp">
       <h4>Client &amp; Cover</h4>
       <label class="f">Client name<input type="text" id="i-client" value="OB PRIVATE"></label>
-      <label class="f">Proposal title<input type="text" id="i-title" value="VIDEO PRODUCTION RETAINER PROPOSAL"></label>
+      <label class="f">Proposal title<input type="text" id="i-title" value="VIDEO PRODUCTION PROPOSAL"></label>
       <div class="row">
         <label class="f">Date<input type="text" id="i-date" value="21 February 2026"></label>
       </div>
@@ -216,6 +216,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     </div>
 
     <div class="grp">
+      <h4>Quote options (tiers)</h4>
+      <label class="f">Intro line<textarea id="i-optintro">If it helps, here are a few options at different levels of investment — pick whichever best fits your budget.</textarea></label>
+      <div id="tier-list"></div>
+      <button class="btn ghost" id="add-tier">+ Add option</button>
+      <p class="hint">Up to four side-by-side columns (Essential, Standard, Enhanced, Signature) — each a total price. Tick “Quote Options (tiers)” above to include it.</p>
+    </div>
+
+    <div class="grp">
       <button class="btn" id="btn-print">⤓  Save / Print as PDF</button>
       <p class="hint" style="margin-top:9px;">Uses your browser's “Save as PDF”. In the print dialog set margins to <b>None</b> and enable <b>Background graphics</b> for a pixel-clean file.</p>
     </div>
@@ -241,6 +249,7 @@ const SECTIONS = [
   {id:'includes',  name:'What Each Video Includes', on:true},
   {id:'scope',     name:'Monthly Retainer Options', on:true},
   {id:'quote',     name:'Project Quote (one-off)', on:false},
+  {id:'options',   name:'Quote Options (tiers)', on:false},
   {id:'rates',     name:'Additional Day Rates', on:true},
   {id:'terms',     name:'Key Terms & Conditions', on:true},
   {id:'retainer',  name:'Ongoing Retainer note', on:false},
@@ -262,8 +271,15 @@ const DEFAULT_QUOTEITEMS = [
   {cat:'Filmmaking',           desc:'On-location filming',                       rate:550, days:2},
   {cat:'Post-Production',      desc:'Edit, colour grade, music and titles',      rate:350, days:3},
 ];
+const TIER_NAMES = ['Essential','Standard','Enhanced','Signature'];
+const DEFAULT_TIERS = [
+  {name:'Essential', includes:'Filming\nEditing',                                   price:1200},
+  {name:'Standard',  includes:'Filming\nEditing\nMotion graphics',                  price:1650},
+  {name:'Enhanced',  includes:'Filming\nEditing\nMotion graphics\nDrone aerials',   price:2100},
+];
 let keyAspects = DEFAULT_KEYASPECTS.map(a=>({...a}));
 let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
+let quoteTiers = DEFAULT_TIERS.map(t=>({...t}));
 
 // ---- toggles UI + drag reorder ----
 const togWrap = document.getElementById('sec-toggles');
@@ -353,6 +369,28 @@ function renderQuote(){
   });
 }
 
+// ---- quote options / tiers (editable) ----
+document.getElementById('add-tier').onclick=()=>{
+  if(quoteTiers.length>=4){alert('Up to four options fit across the page.');return;}
+  quoteTiers.push({name:TIER_NAMES[quoteTiers.length]||'Option', includes:'Filming\nEditing', price:0});
+  renderTiers();render();
+};
+function renderTiers(){
+  const w=document.getElementById('tier-list'); w.innerHTML='';
+  quoteTiers.forEach((t,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    d.innerHTML=`<span class="x" title="remove">✕</span>
+      <label class="f">Option name<input type="text" class="t-name" value="${(t.name||'').replace(/"/g,'&quot;')}"></label>
+      <label class="f">What’s included (one per line)<textarea class="t-inc">${t.includes}</textarea></label>
+      <label class="f">Total price (£)<input type="number" class="t-price" value="${t.price}"></label>`;
+    d.querySelector('.x').onclick=()=>{quoteTiers.splice(i,1);renderTiers();render();};
+    d.querySelector('.t-name').oninput=e=>{t.name=e.target.value;render();};
+    d.querySelector('.t-inc').oninput=e=>{t.includes=e.target.value;render();};
+    d.querySelector('.t-price').oninput=e=>{t.price=parseFloat(e.target.value)||0;render();};
+    w.appendChild(d);
+  });
+}
+
 // ---- cover upload ----
 document.getElementById('i-cover').onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
@@ -437,8 +475,17 @@ function secHTML(id){
         <tr class="total"><td colspan="4" style="text-align:right;">${q.discAmount>0?'Grand total':'Total'}</td><td class="c">${gbp(q.grand)}</td></tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`; }
+   case 'options': return `<div class="bar mt">QUOTE OPTIONS</div>
+      ${val('i-optintro').trim()?`<p>${esc(val('i-optintro'))}</p>`:''}
+      <table class="price"><thead><tr>
+        ${quoteTiers.map(t=>`<th class="c">${esc(t.name)}</th>`).join('')}
+      </tr></thead><tbody>
+        <tr>${quoteTiers.map(t=>`<td class="c" style="vertical-align:top;">${esc(t.includes)}</td>`).join('')}</tr>
+        <tr class="total">${quoteTiers.map(t=>`<td class="c">${gbp(t.price)}</td>`).join('')}</tr>
+      </tbody></table>
+      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`;
    case 'rates': return `<div class="bar mt">ADDITIONAL DAY RATES</div>
-      <p style="font-size:9.8pt;">Work outside the agreed monthly scope is scoped and quoted in advance at the following day rates, so you always know the cost before anything begins.</p>
+      <p>Work outside the agreed monthly scope is scoped and quoted in advance at the following day rates, so you always know the cost before anything begins.</p>
       <table class="rates"><thead><tr><th>Role</th><th style="text-align:right;">Day rate (7 hrs)</th></tr></thead><tbody>
         <tr><td>Videographer / Director of Photography</td><td class="r">${gbp(num('r-dop'))}</td></tr>
         <tr><td>Editor</td><td class="r">${gbp(num('r-ed'))}</td></tr>
@@ -485,7 +532,7 @@ function render(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -494,7 +541,7 @@ function snapshot(){
   const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
   const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
   return {inputs, toggles, order:[...order], customs:clone(customs),
-          keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
+          keyAspects:clone(keyAspects), quoteItems:clone(quoteItems), quoteTiers:clone(quoteTiers),
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
 function applyState(st){
@@ -506,10 +553,11 @@ function applyState(st){
   customs = Array.isArray(st.customs) ? clone(st.customs) : [];
   keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
   quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
+  quoteTiers = Array.isArray(st.quoteTiers) ? clone(st.quoteTiers) : DEFAULT_TIERS.map(t=>({...t}));
   coverIsDefault = st.coverIsDefault!==false;
   coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
   document.getElementById('i-cover').value='';
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); render();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderTiers(); render();
 }
 function loadStore(){
   try{ drafts=JSON.parse(localStorage.getItem(DKEY))||[]; }catch(e){ drafts=[]; }
@@ -609,7 +657,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
   .forEach(el=>el.addEventListener('input',render));
 document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
@@ -621,7 +669,7 @@ if(drafts.length){
   const cur=drafts.find(d=>d.id===currentId)||drafts[0];
   currentId=cur.id; applyState(cur.state);
 }else{
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); render();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderTiers(); render();
   newDraft(clone(DEFAULT_STATE), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
