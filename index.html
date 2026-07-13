@@ -54,6 +54,14 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .draft .dt{font-size:9.5px;color:#7d8fce;white-space:nowrap;}
 .draft .ic{color:#8a93c9;cursor:pointer;font-size:12px;padding:0 1px;}
 .draft .ic:hover{color:#fff;}
+.tierchk{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;margin:0 6px 6px 0;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:7px;cursor:pointer;font-size:11.5px;user-select:none;}
+.tierchk.on{border-color:var(--blue);color:#fff;}
+.tierchk input{width:14px;height:14px;accent-color:var(--blue);cursor:pointer;}
+.grp.collapsible>h4{display:flex;justify-content:space-between;align-items:center;margin:0;cursor:pointer;}
+.grp.collapsible>.grp-body{display:none;margin-top:12px;}
+.grp.collapsible.open>.grp-body{display:block;}
+.grp .chev{color:#7d8fce;font-size:10px;transition:transform .15s;}
+.grp.collapsible.open>h4 .chev{transform:rotate(90deg);}
 
 /* ---------------- preview ---------------- */
 .stage{overflow-y:auto;padding:28px 28px 60px;background:#dfe3ea;}
@@ -221,11 +229,17 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     </div>
 
     <div class="grp">
-      <h4>Quote options (tiers)</h4>
+      <h4>Quote options (comparison)</h4>
       <label class="f">Intro line<textarea id="i-optintro">If it helps, here are a few options at different levels of investment — pick whichever best fits your budget.</textarea></label>
-      <div id="tier-list"></div>
-      <button class="btn ghost" id="add-tier">+ Add option</button>
-      <p class="hint">Up to four side-by-side columns (Essential, Standard, Enhanced, Signature) — each a total price. Tick “Quote Options (tiers)” above to include it.</p>
+      <label class="f" style="margin-bottom:5px;">Columns to show — auto-ordered budget → premium (max 4)</label>
+      <div id="opt-tierchecks"></div>
+      <label class="f" style="margin:10px 0 5px;">Categories &amp; values (blank cell = dash)</label>
+      <div id="opt-rows"></div>
+      <button class="btn ghost" id="add-optrow">+ Add category</button>
+      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional)</label>
+      <div id="opt-notes"></div>
+      <button class="btn ghost" id="add-optnote">+ Add explanation</button>
+      <p class="hint">Grand total per column is summed automatically. Tick “Quote Options” in the sections list to include it.</p>
     </div>
 
     <div class="grp">
@@ -242,6 +256,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <h4>Ongoing retainer note</h4>
       <label class="f">Wording<textarea id="i-retainer">Unused shoot days may roll to the following month. Retainer fees remain payable regardless of usage. Any additional work is confirmed in writing, at the day rates above, before it proceeds.</textarea></label>
       <p class="hint">Tick “Ongoing Retainer note” in the sections list to include it.</p>
+    </div>
+
+    <div class="grp">
+      <h4>Next steps</h4>
+      <label class="f">Wording<textarea id="i-next" style="min-height:110px;">Once you've read this through, let me know which option works best and I'll draw up the Terms of Engagement for both parties to sign, and we can plan the first month in.
+
+If you have any questions about pricing or scope, please do get in touch.</textarea></label>
+      <p class="hint">A blank line starts a new paragraph. The “Yours sincerely” sign-off and signature are added automatically.</p>
     </div>
 
     <div class="grp">
@@ -293,12 +315,15 @@ const DEFAULT_QUOTEITEMS = [
   {cat:'Filmmaking',           desc:'On-location filming',                       rate:550, days:2},
   {cat:'Post-Production',      desc:'Edit, colour grade, music and titles',      rate:350, days:3},
 ];
-const TIER_NAMES = ['Essential','Standard','Enhanced','Signature'];
-const DEFAULT_TIERS = [
-  {name:'Essential', includes:'Filming\nEditing',                                   price:1200},
-  {name:'Standard',  includes:'Filming\nEditing\nMotion graphics',                  price:1650},
-  {name:'Enhanced',  includes:'Filming\nEditing\nMotion graphics\nDrone aerials',   price:2100},
+const TIER_LADDER = ['Essential','Standard','Enhanced','Premium','Premium+'];  // budget → premium
+const DEFAULT_OPTTIERS = ['Essential','Standard','Enhanced'];
+const DEFAULT_OPTROWS = [
+  {cat:'Filmmaking',      vals:{Essential:1200, Standard:1200, Enhanced:1200}},
+  {cat:'Motion graphics', vals:{Standard:450, Enhanced:450}},
+  {cat:'Drone aerials',   vals:{Enhanced:450}},
 ];
+const optCols = ()=>optTiers.slice().sort((a,b)=>TIER_LADDER.indexOf(a)-TIER_LADDER.indexOf(b));
+const isNum = v=>v!==null&&v!==undefined&&v!==''&&!isNaN(v);
 const DEFAULT_TERMS = [
   {h:'Turnaround & Revisions', b:'Initial drafts within 2–3 weeks of receiving all assets. Two rounds of revisions included per video.'},
   {h:'Location',               b:'Filming within Central London is included; travel beyond may incur an additional charge.'},
@@ -314,7 +339,9 @@ const HEADERS = {about:'About This Partnership', includes:'What Each Video Inclu
   retainer:'Ongoing Retainer', next:'Next Steps'};
 let keyAspects = DEFAULT_KEYASPECTS.map(a=>({...a}));
 let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
-let quoteTiers = DEFAULT_TIERS.map(t=>({...t}));
+let optTiers = DEFAULT_OPTTIERS.slice();
+let optRows = DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
+let optNotes = [];   // cost explanations {label, text}
 let terms = DEFAULT_TERMS.map(t=>({...t}));
 let retainerTerms = DEFAULT_RETAINER_TERMS.map(t=>({...t}));
 let chkRetTerms = false;
@@ -407,27 +434,55 @@ function renderQuote(){
   });
 }
 
-// ---- quote options / tiers (editable) ----
-document.getElementById('add-tier').onclick=()=>{
-  if(quoteTiers.length>=4){alert('Up to four options fit across the page.');return;}
-  quoteTiers.push({name:TIER_NAMES[quoteTiers.length]||'Option', includes:'Filming\nEditing', price:0});
-  renderTiers();render();
-};
-function renderTiers(){
-  const w=document.getElementById('tier-list'); w.innerHTML='';
-  quoteTiers.forEach((t,i)=>{
-    const d=document.createElement('div'); d.className='customsec';
-    d.innerHTML=`<span class="x" title="remove">✕</span>
-      <label class="f">Option name<input type="text" class="t-name" value="${(t.name||'').replace(/"/g,'&quot;')}"></label>
-      <label class="f">What’s included (one per line)<textarea class="t-inc">${t.includes}</textarea></label>
-      <label class="f">Total price (£)<input type="number" class="t-price" value="${t.price}"></label>`;
-    d.querySelector('.x').onclick=()=>{quoteTiers.splice(i,1);renderTiers();render();};
-    d.querySelector('.t-name').oninput=e=>{t.name=e.target.value;render();};
-    d.querySelector('.t-inc').oninput=e=>{t.includes=e.target.value;render();};
-    d.querySelector('.t-price').oninput=e=>{t.price=parseFloat(e.target.value)||0;render();};
-    w.appendChild(d);
-  });
+// ---- quote options (comparison matrix) ----
+function renderOptions(){
+  // tier column selectors
+  const tw=document.getElementById('opt-tierchecks');
+  if(tw){ tw.innerHTML='';
+    TIER_LADDER.forEach(t=>{
+      const on=optTiers.includes(t);
+      const l=document.createElement('label'); l.className='tierchk'+(on?' on':'');
+      l.innerHTML=`<input type="checkbox" ${on?'checked':''}><span>${t}</span>`;
+      l.querySelector('input').onchange=e=>{
+        if(e.target.checked){ if(optTiers.length>=4){ e.target.checked=false; alert('Up to four columns fit across the page.'); return; } optTiers.push(t); }
+        else optTiers=optTiers.filter(x=>x!==t);
+        renderOptions(); render();
+      };
+      tw.appendChild(l);
+    });
+  }
+  // category rows with a value per selected tier
+  const w=document.getElementById('opt-rows');
+  if(w){ w.innerHTML=''; const cols=optCols();
+    optRows.forEach((r,ri)=>{
+      const d=document.createElement('div'); d.className='customsec';
+      const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(c)}<input type="number" class="ov" data-t="${esc(c)}" value="${isNum(r.vals[c])?r.vals[c]:''}" placeholder="—"></label>`).join('');
+      d.innerHTML=`<span class="x" title="remove">✕</span>
+        <label class="f">Category<input type="text" class="ocat" value="${(r.cat||'').replace(/"/g,'&quot;')}"></label>
+        <div class="row" style="flex-wrap:wrap;gap:7px;">${cells||'<span class="hint">Tick a column above first.</span>'}</div>`;
+      d.querySelector('.x').onclick=()=>{optRows.splice(ri,1);renderOptions();render();};
+      d.querySelector('.ocat').oninput=e=>{r.cat=e.target.value;render();};
+      d.querySelectorAll('.ov').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value; if(v==='') delete r.vals[t]; else r.vals[t]=parseFloat(v)||0; render(); }; });
+      w.appendChild(d);
+    });
+  }
+  // cost explanations
+  const nw=document.getElementById('opt-notes');
+  if(nw){ nw.innerHTML='';
+    optNotes.forEach((n,ni)=>{
+      const d=document.createElement('div'); d.className='customsec';
+      d.innerHTML=`<span class="x" title="remove">✕</span>
+        <label class="f">Label (optional)<input type="text" class="on-l" value="${(n.label||'').replace(/"/g,'&quot;')}"></label>
+        <label class="f">Explanation<textarea class="on-t">${n.text||''}</textarea></label>`;
+      d.querySelector('.x').onclick=()=>{optNotes.splice(ni,1);renderOptions();render();};
+      d.querySelector('.on-l').oninput=e=>{n.label=e.target.value;render();};
+      d.querySelector('.on-t').oninput=e=>{n.text=e.target.value;render();};
+      nw.appendChild(d);
+    });
+  }
 }
+document.getElementById('add-optrow').onclick=()=>{ optRows.push({cat:'New category', vals:{}}); renderOptions(); render(); };
+document.getElementById('add-optnote').onclick=()=>{ optNotes.push({label:'',text:''}); renderOptions(); render(); };
 
 // ---- key terms editors (standard + retainer-specific) ----
 function renderTermList(arr, elId){
@@ -544,15 +599,20 @@ function secHTML(id){
         <tr class="total"><td colspan="4" style="text-align:right;">${q.discAmount>0?'Grand total':'Total'}</td><td class="c">${gbp(q.grand)}</td></tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`; }
-   case 'options': return `<div class="bar mt">QUOTE OPTIONS</div>
+   case 'options': { const cols=optCols();
+      const total=c=>optRows.reduce((s,r)=>s+(isNum(r.vals[c])?+r.vals[c]:0),0);
+      const notesHtml=optNotes.filter(n=>(n.text||'').trim()||(n.label||'').trim())
+        .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`).join('');
+      return `<div class="bar mt">QUOTE OPTIONS</div>
       ${val('i-optintro').trim()?`<p>${esc(val('i-optintro'))}</p>`:''}
       <table class="price"><thead><tr>
-        ${quoteTiers.map(t=>`<th class="c">${esc(t.name)}</th>`).join('')}
+        <th class="rh">&nbsp;</th>${cols.map(c=>`<th class="c">${esc(c)}</th>`).join('')}
       </tr></thead><tbody>
-        <tr>${quoteTiers.map(t=>`<td class="c" style="vertical-align:top;">${esc(t.includes)}</td>`).join('')}</tr>
-        <tr class="total">${quoteTiers.map(t=>`<td class="c">${gbp(t.price)}</td>`).join('')}</tr>
+        ${optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${isNum(r.vals[c])?gbp(r.vals[c]):'—'}</td>`).join('')}</tr>`).join('')}
+        <tr class="total"><td>Grand total</td>${cols.map(c=>`<td class="c">${gbp(total(c))}</td>`).join('')}</tr>
       </tbody></table>
-      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`;
+      ${notesHtml}
+      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`; }
    case 'rates': return `<div class="bar mt">ADDITIONAL DAY RATES</div>
       <p>Work outside the agreed monthly scope is scoped and quoted in advance at the following day rates, so you always know the cost before anything begins.</p>
       <table class="rates"><thead><tr><th>Role</th><th style="text-align:right;">Day rate (7 hrs)</th></tr></thead><tbody>
@@ -566,8 +626,7 @@ function secHTML(id){
    case 'retainer': return `<div class="bar mt">ONGOING RETAINER</div>
       <p>${esc(val('i-retainer'))}</p>`;
    case 'next': return `<div class="bar mt">NEXT STEPS</div>
-      <p>Once you've read this through, let me know which option works best and I'll draw up the Terms of Engagement for both parties to sign, and we can plan the first month in.</p>
-      <p>If you have any questions about pricing or scope, please do get in touch.</p>
+      ${val('i-next').split(/\n\n+/).map(p=>`<p>${esc(p)}</p>`).join('')}
       <p style="margin-top:14pt;">Yours sincerely</p>
       <div class="sig"><img class="sigimg" src="${SIG}" alt="Jack Gilbey signature"><div class="n">Jack Gilbey</div><div class="co">Engels Productions</div></div>`;
   }
@@ -636,7 +695,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','i-retainer','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -645,7 +704,8 @@ function snapshot(){
   const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
   const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
   return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
-          keyAspects:clone(keyAspects), quoteItems:clone(quoteItems), quoteTiers:clone(quoteTiers),
+          keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
+          optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes),
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
@@ -666,7 +726,10 @@ function applyState(st){
   customs = Array.isArray(st.customs) ? clone(st.customs) : [];
   keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
   quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
-  quoteTiers = Array.isArray(st.quoteTiers) ? clone(st.quoteTiers) : DEFAULT_TIERS.map(t=>({...t}));
+  optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
+  if(!optTiers.length) optTiers = DEFAULT_OPTTIERS.slice();
+  optRows = Array.isArray(st.optRows) ? clone(st.optRows) : DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
+  optNotes = Array.isArray(st.optNotes) ? clone(st.optNotes) : [];
   terms = Array.isArray(st.terms) ? clone(st.terms) : DEFAULT_TERMS.map(t=>({...t}));
   retainerTerms = Array.isArray(st.retainerTerms) ? clone(st.retainerTerms) : DEFAULT_RETAINER_TERMS.map(t=>({...t}));
   chkRetTerms = !!st.chkRetTerms;
@@ -674,7 +737,7 @@ function applyState(st){
   coverIsDefault = st.coverIsDefault!==false;
   coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
   document.getElementById('i-cover').value='';
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderTiers(); renderTerms(); renderRetTerms(); render();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
 }
 function loadStore(){
   try{ drafts=JSON.parse(localStorage.getItem(DKEY))||[]; }catch(e){ drafts=[]; }
@@ -774,7 +837,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
   .forEach(el=>el.addEventListener('input',render));
 document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
@@ -786,11 +849,23 @@ if(drafts.length){
   const cur=drafts.find(d=>d.id===currentId)||drafts[0];
   currentId=cur.id; applyState(cur.state);
 }else{
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderTiers(); renderTerms(); renderRetTerms();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
   document.getElementById('i-date').value=todayStr(); render();
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
+
+// ---- collapsible control-panel sections (accordion) ----
+document.querySelectorAll('.panel > .grp').forEach(grp=>{
+  const h=grp.querySelector(':scope > h4'); if(!h) return;
+  const body=document.createElement('div'); body.className='grp-body';
+  while(h.nextSibling) body.appendChild(h.nextSibling);
+  grp.appendChild(body); grp.classList.add('collapsible');
+  h.insertAdjacentHTML('beforeend','<span class="chev">▶</span>');
+  h.addEventListener('click',()=>grp.classList.toggle('open'));
+});
+// open the Drafts panel by default so it's not a bare list on load
+document.querySelector('.panel > .grp.collapsible')?.classList.add('open');
 </script>
 </body>
 </html>
