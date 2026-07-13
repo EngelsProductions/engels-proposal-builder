@@ -239,6 +239,12 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     </div>
 
     <div class="grp">
+      <h4>Ongoing retainer note</h4>
+      <label class="f">Wording<textarea id="i-retainer">Unused shoot days may roll to the following month. Retainer fees remain payable regardless of usage. Any additional work is confirmed in writing, at the day rates above, before it proceeds.</textarea></label>
+      <p class="hint">Tick “Ongoing Retainer note” in the sections list to include it.</p>
+    </div>
+
+    <div class="grp">
       <button class="btn" id="btn-print">⤓  Save / Print as PDF</button>
       <p class="hint" style="margin-top:9px;">Uses your browser's “Save as PDF”. In the print dialog set margins to <b>None</b> and enable <b>Background graphics</b> for a pixel-clean file.</p>
     </div>
@@ -558,7 +564,7 @@ function secHTML(id){
       ${chkRetTerms?retainerTerms.map(t=>`<h4>${esc(t.h)}</h4><p>${esc(t.b)}</p>`).join(''):''}
       </div>`;
    case 'retainer': return `<div class="bar mt">ONGOING RETAINER</div>
-      <p>Unused shoot days may roll to the following month. Retainer fees remain payable regardless of usage. Any additional work is confirmed in writing, at the day rates above, before it proceeds.</p>`;
+      <p>${esc(val('i-retainer'))}</p>`;
    case 'next': return `<div class="bar mt">NEXT STEPS</div>
       <p>Once you've read this through, let me know which option works best and I'll draw up the Terms of Engagement for both parties to sign, and we can plan the first month in.</p>
       <p>If you have any questions about pricing or scope, please do get in touch.</p>
@@ -630,7 +636,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','i-retainer','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -768,7 +774,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
   .forEach(el=>el.addEventListener('input',render));
 document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
