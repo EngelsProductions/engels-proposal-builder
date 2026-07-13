@@ -84,11 +84,7 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .c-title{position:absolute;top:0;left:0;right:0;z-index:3;background:rgba(10,10,44,.58);color:#fff;text-align:center;padding:3mm 0;}
 .c-title span{display:inline-block;padding:2pt 26pt;font-size:15.5pt;font-weight:400;letter-spacing:.08em;}
 .c-photo{flex:1;position:relative;overflow:hidden;background:#0d1745;}
-.c-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(1) contrast(1.02);}
-.c-photo::after{content:"";position:absolute;inset:0;background:
-   linear-gradient(160deg,rgba(10,10,44,.72),rgba(52,179,229,.36) 55%,rgba(180,224,246,.34));
-   mix-blend-mode:normal;}
-.c-photo.plain::after{background:linear-gradient(160deg,rgba(10,10,44,.55),rgba(52,179,229,.32));}
+.c-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 .c-client{background:var(--blue);text-align:center;padding:11mm 10mm 9mm;position:relative;z-index:2;}
 .c-client h2{color:#fff;font-weight:500;font-size:21pt;letter-spacing:.12em;}
 .c-client .d{color:#eaf9ff;font-size:9.5pt;letter-spacing:.05em;margin-top:12px;}
@@ -268,8 +264,8 @@ If you have any questions about pricing or scope, please do get in touch.</texta
     </div>
 
     <div class="grp">
-      <button class="btn" id="btn-print">⤓  Save / Print as PDF</button>
-      <p class="hint" style="margin-top:9px;">Uses your browser's “Save as PDF”. In the print dialog set margins to <b>None</b> and enable <b>Background graphics</b> for a pixel-clean file.</p>
+      <button class="btn" id="btn-print">⤓  Save as PDF</button>
+      <p class="hint" style="margin-top:9px;">Opens the save dialog — choose <b>Save as PDF</b> as the destination (in Safari, the <b>PDF ▾</b> menu, bottom-left). Set margins to <b>None</b> for a full-bleed cover. No printer needed.</p>
     </div>
   </aside>
 
@@ -303,6 +299,7 @@ const SECTIONS = [
 let order = SECTIONS.map(s=>s.id);
 let customs = [];   // {title, body}
 let coverSrc = COVER_DEFAULT, coverIsDefault = true;
+let coverBaked = COVER_DEFAULT;   // cover with the duotone (grayscale + gradient) baked in, so it prints reliably
 
 // editable key aspects + project-quote line items
 const DEFAULT_KEYASPECTS = [
@@ -513,9 +510,32 @@ document.getElementById('btn-today').onclick=()=>{ document.getElementById('i-da
 document.getElementById('i-cover').onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader();
-  r.onload=()=>downscale(r.result,2200,0.82,out=>{coverSrc=out;coverIsDefault=false;render();});
+  r.onload=()=>downscale(r.result,2200,0.82,out=>{coverSrc=out;coverIsDefault=false;refreshCover();});
   r.readAsDataURL(f);
 };
+// bake grayscale + navy→blue gradient straight into the image so it renders identically
+// on screen and in any browser's Save-as-PDF (CSS filters/overlays get dropped by Safari).
+function applyDuotone(dataUrl, cb){
+  const img=new Image();
+  img.onload=()=>{ try{
+    const w=img.naturalWidth||1600, h=img.naturalHeight||1000;
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(img,0,0,w,h);
+    const id=ctx.getImageData(0,0,w,h), d=id.data;
+    for(let i=0;i<d.length;i+=4){ const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; d[i]=d[i+1]=d[i+2]=g; }
+    ctx.putImageData(id,0,0);
+    const grad=ctx.createLinearGradient(w*0.2,0,w*0.8,h);
+    grad.addColorStop(0,'rgba(10,10,44,0.72)');
+    grad.addColorStop(0.55,'rgba(52,179,229,0.36)');
+    grad.addColorStop(1,'rgba(180,224,246,0.34)');
+    ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+    cb(c.toDataURL('image/jpeg',0.85));
+  }catch(err){ cb(dataUrl); } };
+  img.onerror=()=>cb(dataUrl);
+  img.src=dataUrl;
+}
+function refreshCover(){ applyDuotone(coverIsDefault?COVER_DEFAULT:coverSrc, out=>{ coverBaked=out; render(); }); }
 
 // ---- helpers ----
 const val=id=>document.getElementById(id).value;
@@ -654,7 +674,7 @@ function render(){
 
   let html = `<section class="pg cover">
       <div class="c-top"><div class="c-logo"><img src="${LOGO}"></div></div>
-      <div class="c-photo ${coverIsDefault?'':'plain'}"><img src="${coverSrc}"><div class="c-title"><span>${esc(val('i-title'))}</span></div></div>
+      <div class="c-photo"><img src="${coverBaked}"><div class="c-title"><span>${esc(val('i-title'))}</span></div></div>
       <div class="c-client"><h2>${esc(val('i-client'))}</h2><div class="d">${esc(val('i-date'))}</div></div>
     </section>`;
   pages.forEach((pg,i)=>{ html += `<section class="pg"><div class="pv-body">${pg.map(b=>b.html).join('')}</div>${footer(i+2)}</section>`; });
@@ -739,6 +759,7 @@ function applyState(st){
   coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
   document.getElementById('i-cover').value='';
   renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
+  refreshCover();
 }
 function loadStore(){
   try{ drafts=JSON.parse(localStorage.getItem(DKEY))||[]; }catch(e){ drafts=[]; }
@@ -851,7 +872,7 @@ if(drafts.length){
   currentId=cur.id; applyState(cur.state);
 }else{
   renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
-  document.getElementById('i-date').value=todayStr(); render();
+  document.getElementById('i-date').value=todayStr(); render(); refreshCover();
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
