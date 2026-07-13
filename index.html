@@ -13,7 +13,7 @@
   --box:#34B3E5; --ink:#1C2434; --ink-soft:#5A6474; --line:#E4E8EF; --paper:#fff;
   --panel:#0f1330; --panel-2:#171c40; --panel-line:#2a3160;
 }
-*{box-sizing:border-box;}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 html,body{margin:0;height:100%;font-family:"Poppins",system-ui,sans-serif;background:#eef1f5;color:#1c2434;}
 .app{display:grid;grid-template-columns:390px 1fr;height:100vh;}
 
@@ -132,6 +132,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 /* ---------------- print ---------------- */
 @media print{
   @page{size:A4;margin:0;}
+  html,body,*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
   .panel,.stagebar,.stage{all:unset;}
   .app{display:block;}
   .panel,.stagebar{display:none!important;}
