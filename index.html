@@ -47,6 +47,9 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .calc b{color:#fff;}
 .customsec{background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;padding:11px;margin-bottom:10px;}
 .customsec .x{float:right;color:#8a93c9;cursor:pointer;font-size:13px;}
+.customsec .grip{float:left;color:#5b6398;cursor:grab;font-size:13px;margin-right:8px;user-select:none;}
+.customsec.dragging{opacity:.45;}
+.customsec.over{border-color:var(--blue);}
 .draft{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;margin-bottom:8px;font-size:12.5px;}
 .draft.active{border-color:var(--blue);}
 .draft .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
@@ -492,7 +495,7 @@ function renderOptions(){
   if(nw){ nw.innerHTML='';
     optNotes.forEach((n,ni)=>{
       const d=document.createElement('div'); d.className='customsec';
-      d.innerHTML=`<span class="x" title="remove">✕</span>
+      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
         <label class="f">Label (optional)<input type="text" class="on-l" value="${(n.label||'').replace(/"/g,'&quot;')}"></label>
         <label class="f">Explanation<textarea class="on-t">${n.text||''}</textarea></label>`;
       d.querySelector('.x').onclick=()=>{optNotes.splice(ni,1);renderOptions();render();};
@@ -500,17 +503,34 @@ function renderOptions(){
       d.querySelector('.on-t').oninput=e=>{n.text=e.target.value;render();};
       nw.appendChild(d);
     });
+    makeDraggable(nw, optNotes, renderOptions);
   }
 }
 document.getElementById('add-optrow').onclick=()=>{ optRows.push({cat:'New category', vals:{}}); renderOptions(); render(); };
 document.getElementById('add-optnote').onclick=()=>{ optNotes.push({label:'',text:''}); renderOptions(); render(); };
+
+// drag-to-reorder for .customsec card lists (drag the ⠿ grip on the left)
+function makeDraggable(container, arr, rerender){
+  let from=null;
+  [...container.children].forEach((card,idx)=>{
+    const grip=card.querySelector('.grip');
+    if(grip){ grip.draggable=true;
+      grip.ondragstart=ev=>{ from=idx; card.classList.add('dragging'); ev.dataTransfer.effectAllowed='move'; try{ev.dataTransfer.setData('text','');}catch(_){}};
+      grip.ondragend=()=>{ from=null; [...container.children].forEach(c=>c.classList.remove('dragging','over')); };
+    }
+    card.ondragover=ev=>{ if(from===null)return; ev.preventDefault(); card.classList.add('over'); };
+    card.ondragleave=()=>card.classList.remove('over');
+    card.ondrop=ev=>{ ev.preventDefault(); card.classList.remove('over'); if(from===null||from===idx)return;
+      const [m]=arr.splice(from,1); arr.splice(idx,0,m); from=null; rerender(); render(); };
+  });
+}
 
 // ---- key terms editors (standard + retainer-specific) ----
 function renderTermList(arr, elId){
   const w=document.getElementById(elId); if(!w) return; w.innerHTML='';
   arr.forEach((t,i)=>{
     const d=document.createElement('div'); d.className='customsec';
-    d.innerHTML=`<span class="x" title="remove">✕</span>
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
       <label class="f">Heading<input type="text" class="tm-h" value="${(t.h||'').replace(/"/g,'&quot;')}"></label>
       <label class="f">Text<textarea class="tm-b">${t.b}</textarea></label>`;
     d.querySelector('.x').onclick=()=>{arr.splice(i,1);renderTermList(arr,elId);render();};
@@ -518,6 +538,7 @@ function renderTermList(arr, elId){
     d.querySelector('.tm-b').oninput=e=>{t.b=e.target.value;render();};
     w.appendChild(d);
   });
+  makeDraggable(w, arr, ()=>renderTermList(arr,elId));
 }
 function renderTerms(){ renderTermList(terms,'terms-list'); }
 function renderRetTerms(){ renderTermList(retainerTerms,'retterms-list'); }
