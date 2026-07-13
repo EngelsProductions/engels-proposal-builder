@@ -230,13 +230,15 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <label class="f">Intro line<textarea id="i-optintro">If it helps, here are a few options at different levels of investment — pick whichever best fits your budget.</textarea></label>
       <label class="f" style="margin-bottom:5px;">Columns to show — auto-ordered budget → premium (max 4)</label>
       <div id="opt-tierchecks"></div>
-      <label class="f" style="margin:10px 0 5px;">Categories &amp; values (blank cell = dash)</label>
+      <label class="f" style="margin:10px 0 5px;">Categories &amp; values — type a £ amount, or ✓ for included, or leave blank for a dash</label>
       <div id="opt-rows"></div>
       <button class="btn ghost" id="add-optrow">+ Add category</button>
+      <label class="f" style="margin:14px 0 5px;">Column totals — leave blank to auto-sum the £ amounts above</label>
+      <div id="opt-totals"></div>
       <label class="f" style="margin:14px 0 5px;">Cost explanations (optional)</label>
       <div id="opt-notes"></div>
       <button class="btn ghost" id="add-optnote">+ Add explanation</button>
-      <p class="hint">Grand total per column is summed automatically. Tick “Quote Options” in the sections list to include it.</p>
+      <p class="hint">Use ✓ marks with a typed total for tier comparisons, or £ amounts to auto-sum. Tick “Quote Options” in the sections list to include it.</p>
     </div>
 
     <div class="grp">
@@ -340,6 +342,17 @@ let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
 let optTiers = DEFAULT_OPTTIERS.slice();
 let optRows = DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
 let optNotes = [];   // cost explanations {label, text}
+let optTotals = {};  // manual per-tier total override (blank = auto-sum of numeric cells)
+// interpret a typed cell: number -> price, tick words -> '✓', else blank
+function parseCell(raw){
+  const t=(raw||'').trim();
+  if(t==='') return undefined;
+  if(/^(y|yes|✓|✔|x|inc|incl|included|tick)$/i.test(t)) return '✓';
+  const n=parseFloat(t.replace(/[£,\s]/g,''));
+  return isNaN(n)?undefined:n;
+}
+function cellDisplay(v){ return isNum(v)?gbp(v):(v==='✓'?'<span style="color:var(--blue);font-weight:700;">✓</span>':'—'); }
+function optTotal(c){ return (isNum(optTotals[c])) ? optTotals[c] : optRows.reduce((s,r)=>s+(isNum(r.vals[c])?+r.vals[c]:0),0); }
 let terms = DEFAULT_TERMS.map(t=>({...t}));
 let retainerTerms = DEFAULT_RETAINER_TERMS.map(t=>({...t}));
 let chkRetTerms = false;
@@ -454,15 +467,25 @@ function renderOptions(){
   if(w){ w.innerHTML=''; const cols=optCols();
     optRows.forEach((r,ri)=>{
       const d=document.createElement('div'); d.className='customsec';
-      const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(c)}<input type="number" class="ov" data-t="${esc(c)}" value="${isNum(r.vals[c])?r.vals[c]:''}" placeholder="—"></label>`).join('');
+      const cellVal=v=>isNum(v)?v:(v==='✓'?'✓':'');
+      const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(c)}<input type="text" class="ov" data-t="${esc(c)}" value="${cellVal(r.vals[c])}" placeholder="—"></label>`).join('');
       d.innerHTML=`<span class="x" title="remove">✕</span>
         <label class="f">Category<input type="text" class="ocat" value="${(r.cat||'').replace(/"/g,'&quot;')}"></label>
         <div class="row" style="flex-wrap:wrap;gap:7px;">${cells||'<span class="hint">Tick a column above first.</span>'}</div>`;
       d.querySelector('.x').onclick=()=>{optRows.splice(ri,1);renderOptions();render();};
       d.querySelector('.ocat').oninput=e=>{r.cat=e.target.value;render();};
-      d.querySelectorAll('.ov').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value; if(v==='') delete r.vals[t]; else r.vals[t]=parseFloat(v)||0; render(); }; });
+      d.querySelectorAll('.ov').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, pv=parseCell(e.target.value); if(pv===undefined) delete r.vals[t]; else r.vals[t]=pv; render(); }; });
       w.appendChild(d);
     });
+  }
+  // per-tier total row (blank = auto-sum of numeric cells)
+  const tw2=document.getElementById('opt-totals');
+  if(tw2){ tw2.innerHTML=''; const cols=optCols();
+    if(cols.length){
+      const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(c)}<input type="number" class="otot" data-t="${esc(c)}" value="${isNum(optTotals[c])?optTotals[c]:''}" placeholder="${gbp(optTotal(c)).replace('£','')}"></label>`).join('');
+      tw2.innerHTML=`<div class="row" style="flex-wrap:wrap;gap:7px;">${cells}</div>`;
+      tw2.querySelectorAll('.otot').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value.trim(); if(v==='') delete optTotals[t]; else optTotals[t]=parseFloat(v.replace(/[£,]/g,''))||0; render(); }; });
+    }
   }
   // cost explanations
   const nw=document.getElementById('opt-notes');
@@ -621,7 +644,6 @@ function secHTML(id){
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`; }
    case 'options': { const cols=optCols();
-      const total=c=>optRows.reduce((s,r)=>s+(isNum(r.vals[c])?+r.vals[c]:0),0);
       const notesHtml=optNotes.filter(n=>(n.text||'').trim()||(n.label||'').trim())
         .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`).join('');
       return `<div class="bar mt">QUOTE OPTIONS</div>
@@ -629,8 +651,8 @@ function secHTML(id){
       <table class="price"><thead><tr>
         <th class="rh">&nbsp;</th>${cols.map(c=>`<th class="c">${esc(c)}</th>`).join('')}
       </tr></thead><tbody>
-        ${optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${isNum(r.vals[c])?gbp(r.vals[c]):'—'}</td>`).join('')}</tr>`).join('')}
-        <tr class="total"><td>Grand total</td>${cols.map(c=>`<td class="c">${gbp(total(c))}</td>`).join('')}</tr>
+        ${optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`).join('')}
+        <tr class="total"><td>Total</td>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>
       ${notesHtml?`<div style="margin-top:22pt;">${notesHtml}</div>`:''}`; }
@@ -726,7 +748,7 @@ function snapshot(){
   const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
   return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
           keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
-          optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes),
+          optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
@@ -750,6 +772,7 @@ function applyState(st){
   optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
   if(!optTiers.length) optTiers = DEFAULT_OPTTIERS.slice();
   optRows = Array.isArray(st.optRows) ? clone(st.optRows) : DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
+  optTotals = (st.optTotals && typeof st.optTotals==='object') ? {...st.optTotals} : {};
   optNotes = Array.isArray(st.optNotes) ? clone(st.optNotes) : [];
   terms = Array.isArray(st.terms) ? clone(st.terms) : DEFAULT_TERMS.map(t=>({...t}));
   retainerTerms = Array.isArray(st.retainerTerms) ? clone(st.retainerTerms) : DEFAULT_RETAINER_TERMS.map(t=>({...t}));
