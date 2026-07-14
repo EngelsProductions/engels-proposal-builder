@@ -85,7 +85,7 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .c-logo{width:54%;max-width:112mm;margin:0 auto;overflow:hidden;line-height:0;}
 .c-logo img{width:100%;height:auto;display:block;margin:-8.6% 0;}
 .c-title{position:absolute;top:0;left:0;right:0;z-index:3;background:rgba(10,10,44,.58);color:#fff;text-align:center;padding:3mm 0;}
-.c-title span{display:inline-block;padding:2pt 26pt;font-size:15.5pt;font-weight:400;letter-spacing:.08em;}
+.c-title span{display:inline-block;padding:2pt 26pt;font-size:21pt;font-weight:500;letter-spacing:.08em;}
 .c-photo{flex:1;position:relative;overflow:hidden;background:#0d1745;}
 .c-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 .c-client{background:var(--blue);text-align:center;padding:11mm 10mm 9mm;position:relative;z-index:2;}
@@ -138,6 +138,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
   .stage{display:block;background:#fff;padding:0;overflow:visible;}
   .pg{margin:0;box-shadow:none;break-after:page;width:210mm;min-height:297mm;}
   .pg:last-child{break-after:auto;}
+  .pg.cover{margin-top:-4px;height:calc(297mm + 4px);}
 }
 </style>
 </head>
@@ -195,6 +196,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <div id="ka-list"></div>
       <button class="btn ghost" id="add-ka">+ Add key aspect</button>
       <p class="hint">Appears within About This Partnership as a bold “Key aspects of the shoot:” lead-in, then a light-blue box. Tick “Key Aspects of the Shoot” above to include it.</p>
+    </div>
+
+    <div class="grp">
+      <h4>Portfolio</h4>
+      <label class="f">Intro line<textarea id="i-portintro">A selection of relevant work for this project:</textarea></label>
+      <label class="f">Link URL<input type="text" id="i-porturl" placeholder="https://…"></label>
+      <label class="f">Button text<input type="text" id="i-portlabel" value="View the portfolio"></label>
+      <p class="hint">A clickable button that opens your portfolio link (works in the exported PDF). Tick “Portfolio” in the sections list to include it.</p>
     </div>
 
     <div class="grp">
@@ -293,6 +302,7 @@ const SECTIONS = [
   {id:'about',     name:'About This Partnership', on:true},
   {id:'keyaspects',name:'Key Aspects of the Shoot', on:false},
   {id:'includes',  name:'What Each Video Includes', on:true},
+  {id:'portfolio', name:'Portfolio', on:false},
   {id:'scope',     name:'Monthly Retainer Options', on:true},
   {id:'quote',     name:'Project Quote (one-off)', on:false},
   {id:'options',   name:'Quote Options (tiers)', on:false},
@@ -337,9 +347,9 @@ const DEFAULT_RETAINER_TERMS = [
   {h:'Retainer Fees', b:'Retainer fees are invoiced at the start of each month, payable within 7 days, and remain payable regardless of usage. Unused shoot days may roll to the following month.'},
 ];
 // header text for each section (used by the contents list); sections without an entry have no main header
-const HEADERS = {about:'About This Partnership', includes:'What Each Video Includes', scope:'Monthly Retainer Options',
-  quote:'Project Quote', options:'Quote Options', rates:'Additional Day Rates', terms:'Key Terms & Conditions',
-  retainer:'Ongoing Retainer', next:'Next Steps'};
+const HEADERS = {about:'About This Partnership', includes:'What Each Video Includes', portfolio:'Portfolio',
+  scope:'Monthly Retainer Options', quote:'Project Quote', options:'Quote Options', rates:'Additional Day Rates',
+  terms:'Key Terms & Conditions', retainer:'Ongoing Retainer', next:'Next Steps'};
 let keyAspects = DEFAULT_KEYASPECTS.map(a=>({...a}));
 let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
 let optTiers = DEFAULT_OPTTIERS.slice();
@@ -644,6 +654,11 @@ function secHTML(id){
         <p><span class="k">Post-Production:</span> Full edit with colour grade, music and titles.</p>
         <p><span class="k">Revisions:</span> Two rounds included, delivered in formats ready for social and web.</p>
       </div>`;
+   case 'portfolio': { const url=val('i-porturl').trim(); const label=esc(val('i-portlabel').trim()||'View the portfolio');
+      const href=url.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      return `<div class="bar mt">PORTFOLIO</div>
+      ${val('i-portintro').trim()?`<p>${esc(val('i-portintro'))}</p>`:''}
+      ${url?`<p style="margin-top:4pt;"><a href="${href}" style="display:inline-block;background:var(--blue);color:#fff;text-decoration:none;font-weight:600;padding:7pt 18pt;border-radius:6px;">${label} →</a></p>`:''}`; }
    case 'scope': return `<div class="bar mt">MONTHLY RETAINER OPTIONS</div>
       <table class="price"><thead><tr>
         <th class="rh">&nbsp;</th><th class="c">Ad Hoc</th><th class="c">${c.an} / month</th><th class="c">${c.bn} / month</th>
@@ -675,7 +690,7 @@ function secHTML(id){
         ${optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`).join('')}
         <tr class="total"><td>Total</td>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
       </tbody></table>
-      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>
+      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs and changes to scope.</p>
       ${notesHtml?`<div style="margin-top:22pt;">${notesHtml}</div>`:''}`; }
    case 'rates': return `<div class="bar mt">ADDITIONAL DAY RATES</div>
       <p>Work outside the agreed monthly scope is scoped and quoted in advance at the following day rates, so you always know the cost before anything begins.</p>
@@ -759,7 +774,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -903,7 +918,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
   .forEach(el=>el.addEventListener('input',render));
 document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
