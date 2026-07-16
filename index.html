@@ -76,6 +76,7 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
   box-shadow:0 6px 30px rgba(20,30,60,.16);
 }
 .pg.cover{padding:0;overflow:hidden;background:var(--navy);height:297mm;min-height:297mm;}
+.pg.cover::before{content:"";position:absolute;top:0;left:0;right:0;height:3mm;background:var(--navy);z-index:1;}
 .pv-body{flex:1 1 auto;}
 .pg h1,.pg h2,.pg h3,.pg h4{font-family:"Poppins";margin:0;color:var(--navy);}
 .pg p{font-size:10pt;line-height:1.6;margin:0 0 9pt;color:var(--ink);}
@@ -139,7 +140,6 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
   .stage{display:block;background:#fff;padding:0;overflow:visible;}
   .pg{margin:0;box-shadow:none;break-after:page;width:210mm;min-height:297mm;}
   .pg:last-child{break-after:auto;}
-  .pg.cover{margin-top:-4px;height:calc(297mm + 4px);}
 }
 </style>
 </head>
