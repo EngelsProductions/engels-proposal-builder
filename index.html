@@ -249,6 +249,12 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <button class="btn ghost" id="add-optrow">+ Add category</button>
       <label class="f" style="margin:14px 0 5px;">Column totals — leave blank to auto-sum the £ amounts above</label>
       <div id="opt-totals"></div>
+      <label class="f" style="margin:14px 0 5px;">Discount (optional) — applied to each tier's total</label>
+      <div class="row">
+        <label class="f">Label<input type="text" id="i-optdisc-label" value="Discount"></label>
+        <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-optdisc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
+        <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-optdisc-val" value="0"></label>
+      </div>
       <label class="f" style="margin:14px 0 5px;">Cost explanations (optional)</label>
       <div id="opt-notes"></div>
       <button class="btn ghost" id="add-optnote">+ Add explanation</button>
@@ -682,6 +688,9 @@ function secHTML(id){
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`; }
    case 'options': { const cols=optCols();
+      const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
+      const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
+      const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
       const notesHtml=optNotes.filter(n=>(n.text||'').trim()||(n.label||'').trim())
         .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`).join('');
       return `<div class="bar mt">QUOTE OPTIONS</div>
@@ -690,7 +699,9 @@ function secHTML(id){
         <th class="rh">&nbsp;</th>${cols.map(c=>`<th class="c">${esc(c)}</th>`).join('')}
       </tr></thead><tbody>
         ${optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`).join('')}
-        <tr class="total"><td>Total</td>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
+        ${hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
+        <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:''}
+        <tr class="total"><td>Total</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs and changes to scope.</p>
       ${notesHtml?`<div style="margin-top:22pt;">${notesHtml}</div>`:''}`; }
@@ -776,7 +787,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -920,9 +931,10 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val')
   .forEach(el=>el.addEventListener('input',render));
 document.getElementById('i-disc-type').addEventListener('change',render);
+document.getElementById('i-optdisc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
 
 // ---- init: capture pristine defaults, then load saved drafts ----
