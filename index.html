@@ -90,7 +90,8 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .c-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 .c-client{background:var(--blue);text-align:center;padding:11mm 10mm 9mm;position:relative;z-index:2;}
 .c-client h2{color:#fff;font-weight:500;font-size:21pt;letter-spacing:.12em;}
-.c-client .d{color:#eaf9ff;font-size:9.5pt;letter-spacing:.05em;margin-top:12px;}
+.c-meta{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;}
+.c-meta span{color:#eaf9ff;font-size:9.5pt;letter-spacing:.05em;}
 
 /* content */
 .bar{background:var(--navy);color:#fff;font-weight:600;font-size:12.5pt;letter-spacing:.05em;padding:8pt 13pt;border-radius:3px;margin:0 0 13pt;}
@@ -172,6 +173,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="margin:0;">Date<input type="text" id="i-date" value="21 February 2026"></label>
         <button class="btn ghost" id="btn-today" style="flex:0 0 76px;width:76px;margin:0;padding:9px 0;">Today</button>
       </div>
+      <label class="f">Version<input type="text" id="i-version" value="Version 1"></label>
       <label class="f">Cover photo<input type="file" id="i-cover" accept="image/*"></label>
       <p class="hint">Any photo you drop in gets your blue duotone wash automatically. Leave blank to use the default.</p>
     </div>
@@ -733,7 +735,7 @@ function render(){
   let html = `<section class="pg cover">
       <div class="c-top"><div class="c-logo"><img src="${LOGO}"></div></div>
       <div class="c-photo"><img src="${coverBaked}"><div class="c-title"><span>${esc(val('i-title'))}</span></div></div>
-      <div class="c-client"><h2>${esc(val('i-client'))}</h2><div class="d">${esc(val('i-date'))}</div></div>
+      <div class="c-client"><h2>${esc(val('i-client'))}</h2><div class="c-meta"><span>${esc(val('i-date'))}</span><span>${esc(val('i-version'))}</span></div></div>
     </section>`;
   pages.forEach((pg,i)=>{ html += `<section class="pg"><div class="pv-body">${pg.map(b=>b.html).join('')}</div>${footer(i+2)}</section>`; });
   document.getElementById('preview').innerHTML = html;
@@ -774,7 +776,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -918,7 +920,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val')
   .forEach(el=>el.addEventListener('input',render));
 document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
