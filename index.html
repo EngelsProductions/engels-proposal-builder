@@ -776,7 +776,7 @@ function render(){
   tocTwoCol = false;
   let blocks = build(merge);
   measureBlocks(blocks);
-  const introH = ()=>{ const b=blocks.find(x=>x.id==='intro-group'); return b?b.h:0; };
+  const introH = ()=>{ const b=blocks.find(x=>x.id==='intro-group'); return b?b.solo:0; };
   // won't fit on one page? try a two-column contents list, then fall back to letting them flow
   if(merge && introH()>pageH && groupIds.includes('toc')){
     tocTwoCol = true; blocks = build(true); measureBlocks(blocks);
@@ -801,27 +801,40 @@ function render(){
   document.getElementById('pgcount').textContent = (pages.length+1)+' pages';
   scheduleSave();
 }
-// greedily pack whole sections onto pages — a section only starts a new page if it won't fit on the current one
+// greedily pack whole sections onto pages — a section only starts a new page if it won't fit on the current one.
+// `solo` is a section's height when first on a page; `delta` is what it adds when stacked after another
+// (smaller, because adjacent margins collapse) — using both avoids breaking a page earlier than needed.
 function paginateInto(blocks, pageH){
   pageOf = {};
   const pages=[]; let cur=[], curH=0, pageNo=2;
   blocks.forEach(b=>{
-    if(cur.length>0 && curH + b.h > pageH){ pages.push(cur); cur=[]; curH=0; pageNo++; }
-    cur.push(b); curH += b.h; pageOf[b.id]=pageNo;
+    let add = cur.length===0 ? b.solo : b.delta;
+    if(cur.length>0 && curH + add > pageH){ pages.push(cur); cur=[]; curH=0; pageNo++; add=b.solo; }
+    cur.push(b); curH += add; pageOf[b.id]=pageNo;
     if(b.members) b.members.forEach(m=>pageOf[m]=pageNo);
   });
   if(cur.length) pages.push(cur);
   return pages;
 }
-// measure each block's rendered height at the real content width (flow-root contains inner margins)
+// measure each block at the real content width: on its own (solo) and stacked in order (delta)
 function measureBlocks(blocks){
   const holder=document.createElement('div');
   holder.style.cssText='position:absolute;left:-99999px;top:0;visibility:hidden;';
-  holder.innerHTML=`<div class="pg" style="display:block;width:180mm;min-height:0;height:auto;padding:0;box-shadow:none;">${
-    blocks.map(b=>`<div style="display:flow-root;">${b.html}</div>`).join('')}</div>`;
+  const pgCss='display:flow-root;width:180mm;min-height:0;height:auto;padding:0;box-shadow:none;';
+  holder.innerHTML=`<div class="pg" style="${pgCss}">${
+      blocks.map(b=>`<div style="display:flow-root;">${b.html}</div>`).join('')}</div>
+    <div class="pg" data-stack style="${pgCss}"></div>`;
   document.body.appendChild(holder);
   const kids=[...holder.firstElementChild.children];
-  blocks.forEach((b,i)=>{ b.h = kids[i]?kids[i].offsetHeight:0; });
+  blocks.forEach((b,i)=>{ b.solo = kids[i]?kids[i].offsetHeight:0; });
+  const stack=holder.querySelector('[data-stack]');
+  let prev=0;
+  blocks.forEach(b=>{
+    stack.insertAdjacentHTML('beforeend', b.html);
+    const h=stack.offsetHeight;
+    b.delta = Math.max(0, h-prev); prev=h;
+  });
+  blocks.forEach(b=>{ if(!b.delta) b.delta=b.solo; });
   document.body.removeChild(holder);
 }
 function availablePageHeight(){
