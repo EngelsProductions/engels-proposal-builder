@@ -71,7 +71,7 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .stagebar{display:flex;align-items:center;gap:14px;margin:0 auto 18px;max-width:210mm;color:#54607a;font-size:12px;}
 .stagebar .sp{flex:1;}
 .pg{
-  width:210mm;min-height:297mm;background:#fff;margin:0 auto 18px;position:relative;
+  width:210mm;height:297mm;background:#fff;margin:0 auto 18px;position:relative;overflow:hidden;
   display:flex;flex-direction:column;padding:16mm 15mm 12mm;
   box-shadow:0 6px 30px rgba(20,30,60,.16);
 }
@@ -140,7 +140,9 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
   .app{display:block;}
   .panel,.stagebar{display:none!important;}
   .stage{display:block;background:#fff;padding:0;overflow:visible;}
-  .pg{margin:0;box-shadow:none;break-after:page;width:210mm;min-height:297mm;}
+  /* fixed height + clip: a page box that can never be taller than the sheet, so no engine
+     (Safari especially) can fragment one page across two and leave a blank spill sheet */
+  .pg{margin:0;box-shadow:none;break-after:page;break-inside:avoid;width:210mm;height:297mm;overflow:hidden;}
   .pg:last-child{break-after:auto;}
 }
 </style>
@@ -784,21 +786,40 @@ function render(){
   if(merge && introH()>pageH){
     merge=false; tocTwoCol=false; blocks = build(false); measureBlocks(blocks);
   }
-  paginateInto(blocks, pageH);          // pass 1: work out which page each section lands on
-  const gb = blocks.find(b=>b.id==='intro-group');
-  if(gb) gb.html = gb.members.map(x=>secHTML(x)).join('');   // rebuild with real page numbers
-  const tocB = blocks.find(b=>b.id==='toc');
-  if(tocB) tocB.html = secHTML('toc');  // rebuild contents list with real page numbers (same height)
-  const pages = paginateInto(blocks, pageH);
+  // pass 1 works out which page each section lands on, then the contents list and the merged
+  // intro block are rebuilt with the real page numbers and re-packed (same height, so pages hold)
+  const layout = h => {
+    paginateInto(blocks, h);
+    const gb = blocks.find(b=>b.id==='intro-group');
+    if(gb) gb.html = gb.members.map(x=>secHTML(x)).join('');
+    const tocB = blocks.find(b=>b.id==='toc');
+    if(tocB) tocB.html = secHTML('toc');
+    return paginateInto(blocks, h);
+  };
+  const paint = pages => {
+    let html = `<section class="pg cover">
+        <div class="c-top"><div class="c-logo"><img src="${LOGO}"></div></div>
+        <div class="c-photo"><img src="${coverBaked}"><div class="c-title"><span>${esc(val('i-title'))}</span></div></div>
+        <div class="c-client"><h2>${esc(val('i-client'))}</h2><div class="c-meta"><span>${esc(val('i-date'))}</span><span>${esc(val('i-version'))}</span></div></div>
+      </section>`;
+    pages.forEach((pg,i)=>{ html += `<section class="pg"><div class="pv-body">${pg.map(b=>b.html).join('')}</div>${footer(i+2)}</section>`; });
+    document.getElementById('preview').innerHTML = html;
+    document.getElementById('pgcount').textContent = (pages.length+1)+' pages';
+  };
 
-  let html = `<section class="pg cover">
-      <div class="c-top"><div class="c-logo"><img src="${LOGO}"></div></div>
-      <div class="c-photo"><img src="${coverBaked}"><div class="c-title"><span>${esc(val('i-title'))}</span></div></div>
-      <div class="c-client"><h2>${esc(val('i-client'))}</h2><div class="c-meta"><span>${esc(val('i-date'))}</span><span>${esc(val('i-version'))}</span></div></div>
-    </section>`;
-  pages.forEach((pg,i)=>{ html += `<section class="pg"><div class="pv-body">${pg.map(b=>b.html).join('')}</div>${footer(i+2)}</section>`; });
-  document.getElementById('preview').innerHTML = html;
-  document.getElementById('pgcount').textContent = (pages.length+1)+' pages';
+  let pages = layout(pageH);
+  paint(pages);
+  // the page box is clipped so it can never spill a blank sheet — which means an under-measured
+  // section would be silently cut off instead. Check the real laid-out pages and, if anything
+  // overflowed, tighten the budget and re-pack so the section moves down a page instead.
+  for(let i=0; i<3; i++){
+    const over = Math.max(0, ...[...document.querySelectorAll('.pg:not(.cover) .pv-body')]
+      .map(b => b.scrollHeight - b.clientHeight));
+    if(over <= 0) break;
+    pageH -= over + 2;
+    pages = layout(pageH);
+    paint(pages);
+  }
   scheduleSave();
 }
 // greedily pack whole sections onto pages — a section only starts a new page if it won't fit on the current one.
