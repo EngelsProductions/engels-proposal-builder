@@ -192,6 +192,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <h4>Intro copy (editable)</h4>
       <label class="f">Opening line<textarea id="i-lead">OB Private is building a distinctive lifestyle brand across property, travel and the Circle membership community.</textarea></label>
       <label class="f">Body<textarea id="i-about">The brief is short-form cinematic content each month that reflects the OB Private image: considered, premium, and quietly confident. This arrangement gives a consistent production presence without being locked into a rigid format — the content mix can shift each month depending on what the business needs.</textarea></label>
+      <p class="hint"><b>Bold:</b> select text and press ⌘B (Ctrl+B), or wrap it in <b>**double asterisks**</b>. Works in every text box in this panel.</p>
     </div>
 
     <div class="grp">
@@ -230,6 +231,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 
     <div class="grp">
       <h4>Project quote (one-off)</h4>
+      <label class="f">Intro line<textarea id="i-quoteintro"></textarea></label>
       <label class="toggle" style="margin-bottom:10px;"><input type="checkbox" id="chk-quotedays" checked><span>Show day rate &amp; days columns</span></label>
       <div id="quote-list"></div>
       <button class="btn ghost" id="add-quote">+ Add line item</button>
@@ -620,7 +622,10 @@ function refreshCover(){ applyDuotone(coverIsDefault?COVER_DEFAULT:coverSrc, out
 const val=id=>document.getElementById(id).value;
 const num=id=>parseFloat(document.getElementById(id).value)||0;
 const gbp=n=>'£'+Math.round(n).toLocaleString('en-GB');
-const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+// escape, then turn **bold** markers into real bold (⌘B in the panel inserts the markers)
+const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>')
+  .replace(/\n/g,'<br>');
 function footer(n){return `<div class="foot"><div class="b">${esc(val('i-client'))} — Video Production Proposal<span>jack.gilbey@engelsproductions.co.uk · 07889 791554</span></div><div class="pg-n">${n}</div></div>`;}
 
 // ---- pricing calc ----
@@ -695,6 +700,7 @@ function secHTML(id){
       <p class="note">Engels Productions is not VAT registered. Prices subject to T&amp;Cs, travel expenses and changes to scope. Creative direction billed separately by Sigrid Media.</p>`;
    case 'quote': { const q=quoteCalc(); const sd=showQuoteDays, span=sd?4:2;
       return `<div class="bar mt">PROJECT QUOTE</div>
+      ${val('i-quoteintro').trim()?`<p>${esc(val('i-quoteintro'))}</p>`:''}
       <table class="price"><thead><tr>
         <th>Category</th><th>Description</th>${sd?'<th class="c">Day rate</th><th class="c">Days</th>':''}<th class="c">Total</th>
       </tr></thead><tbody>
@@ -828,7 +834,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -976,8 +982,22 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val')
   .forEach(el=>el.addEventListener('input',render));
+// ⌘B / Ctrl+B in any panel text field wraps the selection in **bold** markers
+document.querySelector('.panel').addEventListener('keydown',e=>{
+  if(!(e.metaKey||e.ctrlKey) || (e.key||'').toLowerCase()!=='b') return;
+  const el=e.target;
+  if(!el || (el.tagName!=='TEXTAREA' && !(el.tagName==='INPUT' && el.type==='text'))) return;
+  e.preventDefault();
+  const s=el.selectionStart, en=el.selectionEnd; if(s===en) return;
+  const v=el.value, sel=v.slice(s,en);
+  const wrapped = sel.startsWith('**') && sel.endsWith('**') && sel.length>4;
+  el.value = wrapped ? v.slice(0,s)+sel.slice(2,-2)+v.slice(en)
+                     : v.slice(0,s)+'**'+sel+'**'+v.slice(en);
+  el.setSelectionRange(s, wrapped ? en-4 : en+4);
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+});
 document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('i-optdisc-type').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
