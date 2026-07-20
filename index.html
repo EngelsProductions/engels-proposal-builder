@@ -236,6 +236,9 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-disc-val" value="0"></label>
       </div>
       <div class="calc" id="quote-out"></div>
+      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional)</label>
+      <div id="quote-notes"></div>
+      <button class="btn ghost" id="add-quotenote">+ Add explanation</button>
       <p class="hint">Tick “Project Quote (one-off)” above to include this instead of the retainer table.</p>
     </div>
 
@@ -362,7 +365,8 @@ let keyAspects = DEFAULT_KEYASPECTS.map(a=>({...a}));
 let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
 let optTiers = DEFAULT_OPTTIERS.slice();
 let optRows = DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
-let optNotes = [];   // cost explanations {label, text}
+let optNotes = [];   // cost explanations {label, text} — quote options
+let quoteNotes = []; // cost explanations {label, text} — project quote
 let optTotals = {};  // manual per-tier total override (blank = auto-sum of numeric cells)
 // interpret a typed cell: number -> price, tick words -> '✓', else blank
 function parseCell(raw){
@@ -464,7 +468,9 @@ function renderQuote(){
     d.querySelector('.q-days').oninput=e=>{it.days=parseFloat(e.target.value)||0;render();};
     w.appendChild(d);
   });
+  renderNoteList(quoteNotes, 'quote-notes', renderQuote);
 }
+document.getElementById('add-quotenote').onclick=()=>{ quoteNotes.push({label:'',text:''}); renderQuote(); render(); };
 
 // ---- quote options (comparison matrix) ----
 function renderOptions(){
@@ -508,21 +514,27 @@ function renderOptions(){
       tw2.querySelectorAll('.otot').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value.trim(); if(v==='') delete optTotals[t]; else optTotals[t]=parseFloat(v.replace(/[£,]/g,''))||0; render(); }; });
     }
   }
-  // cost explanations
-  const nw=document.getElementById('opt-notes');
-  if(nw){ nw.innerHTML='';
-    optNotes.forEach((n,ni)=>{
-      const d=document.createElement('div'); d.className='customsec';
-      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
-        <label class="f">Label (optional)<input type="text" class="on-l" value="${(n.label||'').replace(/"/g,'&quot;')}"></label>
-        <label class="f">Explanation<textarea class="on-t">${n.text||''}</textarea></label>`;
-      d.querySelector('.x').onclick=()=>{optNotes.splice(ni,1);renderOptions();render();};
-      d.querySelector('.on-l').oninput=e=>{n.label=e.target.value;render();};
-      d.querySelector('.on-t').oninput=e=>{n.text=e.target.value;render();};
-      nw.appendChild(d);
-    });
-    makeDraggable(nw, optNotes, renderOptions);
-  }
+  renderNoteList(optNotes, 'opt-notes', renderOptions);
+}
+// shared cost-explanation editor (used by Quote Options and Project Quote)
+function renderNoteList(arr, elId, rerender){
+  const w=document.getElementById(elId); if(!w) return; w.innerHTML='';
+  arr.forEach((n,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+      <label class="f">Label (optional)<input type="text" class="on-l" value="${(n.label||'').replace(/"/g,'&quot;')}"></label>
+      <label class="f">Explanation<textarea class="on-t">${n.text||''}</textarea></label>`;
+    d.querySelector('.x').onclick=()=>{arr.splice(i,1);rerender();render();};
+    d.querySelector('.on-l').oninput=e=>{n.label=e.target.value;render();};
+    d.querySelector('.on-t').oninput=e=>{n.text=e.target.value;render();};
+    w.appendChild(d);
+  });
+  makeDraggable(w, arr, rerender);
+}
+// cost explanations rendered into the proposal
+function notesHtmlFor(arr){
+  return arr.filter(n=>(n.text||'').trim()||(n.label||'').trim())
+    .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`).join('');
 }
 document.getElementById('add-optrow').onclick=()=>{ optRows.push({cat:'New category', vals:{}}); renderOptions(); render(); };
 document.getElementById('add-optnote').onclick=()=>{ optNotes.push({label:'',text:''}); renderOptions(); render(); };
@@ -684,15 +696,15 @@ function secHTML(id){
         ${quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td><td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td><td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`).join('')}
         ${q.discAmount>0?`<tr class="rate"><th class="rh" colspan="4" style="text-align:right;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
         <tr><td colspan="4" style="text-align:right;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
-        <tr class="total"><td colspan="4" style="text-align:right;">${q.discAmount>0?'Grand total':'Total'}</td><td class="c">${gbp(q.grand)}</td></tr>
+        <tr class="total"><td colspan="4" style="text-align:right;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>
       </tbody></table>
-      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>`; }
+      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>
+      ${notesHtmlFor(quoteNotes)?`<div style="margin-top:22pt;">${notesHtmlFor(quoteNotes)}</div>`:''}`; }
    case 'options': { const cols=optCols();
       const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
       const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
       const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
-      const notesHtml=optNotes.filter(n=>(n.text||'').trim()||(n.label||'').trim())
-        .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`).join('');
+      const notesHtml=notesHtmlFor(optNotes);
       return `<div class="bar mt">QUOTE OPTIONS</div>
       ${val('i-optintro').trim()?`<p>${esc(val('i-optintro'))}</p>`:''}
       <table class="price"><thead><tr>
@@ -701,7 +713,7 @@ function secHTML(id){
         ${optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`).join('')}
         ${hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
         <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:''}
-        <tr class="total"><td>Total</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>
+        <tr class="total"><td>Total investment</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs and changes to scope.</p>
       ${notesHtml?`<div style="margin-top:22pt;">${notesHtml}</div>`:''}`; }
@@ -798,6 +810,7 @@ function snapshot(){
   return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
           keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
+          quoteNotes:clone(quoteNotes),
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
@@ -823,6 +836,7 @@ function applyState(st){
   optRows = Array.isArray(st.optRows) ? clone(st.optRows) : DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
   optTotals = (st.optTotals && typeof st.optTotals==='object') ? {...st.optTotals} : {};
   optNotes = Array.isArray(st.optNotes) ? clone(st.optNotes) : [];
+  quoteNotes = Array.isArray(st.quoteNotes) ? clone(st.quoteNotes) : [];
   terms = Array.isArray(st.terms) ? clone(st.terms) : DEFAULT_TERMS.map(t=>({...t}));
   retainerTerms = Array.isArray(st.retainerTerms) ? clone(st.retainerTerms) : DEFAULT_RETAINER_TERMS.map(t=>({...t}));
   chkRetTerms = !!st.chkRetTerms;
