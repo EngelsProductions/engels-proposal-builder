@@ -684,7 +684,9 @@ function secHTML(id){
         <p><span class="k">Post-Production:</span> Full edit with colour grade, music and titles.</p>
         <p><span class="k">Revisions:</span> Two rounds included, delivered in formats ready for social and web.</p>
       </div>`;
-   case 'portfolio': { const url=val('i-porturl').trim(); const label=esc(val('i-portlabel').trim()||'View the portfolio');
+   case 'portfolio': { const raw=val('i-porturl').trim(); const label=esc(val('i-portlabel').trim()||'View the portfolio');
+      // a URL without a scheme becomes a broken relative link in the PDF — default it to https
+      const url = raw && !/^[a-z][a-z0-9+.\-]*:/i.test(raw) ? 'https://'+raw.replace(/^\/+/,'') : raw;
       const href=url.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
       return `<div class="bar mt">PORTFOLIO</div>
       ${val('i-portintro').trim()?`<p>${esc(val('i-portintro'))}</p>`:''}
@@ -830,7 +832,9 @@ function availablePageHeight(){
   document.body.appendChild(holder);
   const footerH=holder.firstElementChild.offsetHeight;
   document.body.removeChild(holder);
-  return (297-16-12)*mm2px - footerH - 6;   // page content area minus footer, small safety margin
+  // page content area minus footer, minus 8mm safety so print layout (which reflows slightly
+  // differently to screen, especially in Safari) can't overflow and spill a blank page
+  return (297-16-12)*mm2px - footerH - 8*mm2px;
 }
 
 // ================= DRAFTS — saved to this browser =================
