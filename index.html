@@ -228,6 +228,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 
     <div class="grp">
       <h4>Project quote (one-off)</h4>
+      <label class="toggle" style="margin-bottom:10px;"><input type="checkbox" id="chk-quotedays" checked><span>Show day rate &amp; days columns</span></label>
       <div id="quote-list"></div>
       <button class="btn ghost" id="add-quote">+ Add line item</button>
       <div class="row" style="margin-top:12px;">
@@ -367,6 +368,7 @@ let optTiers = DEFAULT_OPTTIERS.slice();
 let optRows = DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
 let optNotes = [];   // cost explanations {label, text} — quote options
 let quoteNotes = []; // cost explanations {label, text} — project quote
+let showQuoteDays = true;  // show the day-rate/days columns on the project quote
 let optTotals = {};  // manual per-tier total override (blank = auto-sum of numeric cells)
 // interpret a typed cell: number -> price, tick words -> '✓', else blank
 function parseCell(raw){
@@ -471,6 +473,7 @@ function renderQuote(){
   renderNoteList(quoteNotes, 'quote-notes', renderQuote);
 }
 document.getElementById('add-quotenote').onclick=()=>{ quoteNotes.push({label:'',text:''}); renderQuote(); render(); };
+document.getElementById('chk-quotedays').onchange=e=>{ showQuoteDays=e.target.checked; render(); };
 
 // ---- quote options (comparison matrix) ----
 function renderOptions(){
@@ -688,15 +691,15 @@ function secHTML(id){
         <tr><th class="rh">Saving vs ad hoc</th><td class="c">—</td><td class="c save">Save ${gbp(c.asav)}/mo</td><td class="c save">Save ${gbp(c.bsav)}/mo</td></tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Prices subject to T&amp;Cs, travel expenses and changes to scope. Creative direction billed separately by Sigrid Media.</p>`;
-   case 'quote': { const q=quoteCalc();
+   case 'quote': { const q=quoteCalc(); const sd=showQuoteDays, span=sd?4:2;
       return `<div class="bar mt">PROJECT QUOTE</div>
       <table class="price"><thead><tr>
-        <th>Category</th><th>Description</th><th class="c">Day rate</th><th class="c">Days</th><th class="c">Total</th>
+        <th>Category</th><th>Description</th>${sd?'<th class="c">Day rate</th><th class="c">Days</th>':''}<th class="c">Total</th>
       </tr></thead><tbody>
-        ${quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td><td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td><td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`).join('')}
-        ${q.discAmount>0?`<tr class="rate"><th class="rh" colspan="4" style="text-align:right;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
-        <tr><td colspan="4" style="text-align:right;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
-        <tr class="total"><td colspan="4" style="text-align:right;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>
+        ${quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td>${sd?`<td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td>`:''}<td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`).join('')}
+        ${q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:right;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
+        <tr><td colspan="${span}" style="text-align:right;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
+        <tr class="total"><td colspan="${span}" style="text-align:right;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>
       </tbody></table>
       <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>
       ${notesHtmlFor(quoteNotes)?`<div style="margin-top:22pt;">${notesHtmlFor(quoteNotes)}</div>`:''}`; }
@@ -810,7 +813,7 @@ function snapshot(){
   return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
           keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
-          quoteNotes:clone(quoteNotes),
+          quoteNotes:clone(quoteNotes), showQuoteDays,
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
@@ -837,6 +840,8 @@ function applyState(st){
   optTotals = (st.optTotals && typeof st.optTotals==='object') ? {...st.optTotals} : {};
   optNotes = Array.isArray(st.optNotes) ? clone(st.optNotes) : [];
   quoteNotes = Array.isArray(st.quoteNotes) ? clone(st.quoteNotes) : [];
+  showQuoteDays = st.showQuoteDays!==false;
+  document.getElementById('chk-quotedays').checked = showQuoteDays;
   terms = Array.isArray(st.terms) ? clone(st.terms) : DEFAULT_TERMS.map(t=>({...t}));
   retainerTerms = Array.isArray(st.retainerTerms) ? clone(st.retainerTerms) : DEFAULT_RETAINER_TERMS.map(t=>({...t}));
   chkRetTerms = !!st.chkRetTerms;
