@@ -219,15 +219,12 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 
     <div class="grp">
       <h4>Pricing — retainer tiers</h4>
-      <label class="f">Ad-hoc rate per video (£)<input type="number" id="p-adhoc" value="395"></label>
-      <div class="row">
-        <label class="f">Tier A videos/mo<input type="number" id="p-a-n" value="2"></label>
-        <label class="f">Tier A price/mo (£)<input type="number" id="p-a-p" value="750"></label>
-      </div>
-      <div class="row">
-        <label class="f">Tier B videos/mo<input type="number" id="p-b-n" value="4"></label>
-        <label class="f">Tier B price/mo (£)<input type="number" id="p-b-p" value="1385"></label>
-      </div>
+      <label class="f">Row label<input type="text" id="i-retlabel" value="Short-form lifestyle video"></label>
+      <label class="toggle" style="margin:2px 0 8px;"><input type="checkbox" id="chk-adhoc" checked><span>Include an “Ad Hoc” comparison column</span></label>
+      <label class="f" id="adhoc-rate-f">Ad-hoc rate per video (£)<input type="number" id="p-adhoc" value="395"></label>
+      <div id="ret-tiers"></div>
+      <button class="btn ghost" id="add-tier">+ Add tier</button>
+      <p class="hint">Each tier is a column. Drag the grip to reorder; the left-most tier is the baseline for “Saving” when Ad Hoc is off.</p>
       <div class="calc" id="calc-out"></div>
       <div class="row" style="margin-top:10px;">
         <label class="f">Videographer day (£)<input type="number" id="r-dop" value="550"></label>
@@ -350,6 +347,10 @@ const DEFAULT_QUOTEITEMS = [
   {cat:'Filmmaking',           desc:'On-location filming',                       rate:550, days:2},
   {cat:'Post-Production',      desc:'Edit, colour grade, music and titles',      rate:350, days:3},
 ];
+// monthly retainer tiers (dynamic: add/remove columns). each tier is {videos, price}
+const DEFAULT_RETTIERS = [ {videos:2, price:750}, {videos:4, price:1385} ];
+// one shared note printed under every pricing table (keeps them identical)
+const VAT_NOTE = 'Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs and changes to scope.';
 const TIER_LADDER = ['Essential','Standard','Enhanced','Premium','Premium+'];  // budget → premium
 const DEFAULT_OPTTIERS = ['Essential','Standard','Enhanced'];
 const DEFAULT_OPTROWS = [
@@ -374,6 +375,8 @@ const HEADERS = {about:'About This Partnership', includes:'What Each Video Inclu
   terms:'Key Terms & Conditions', retainer:'Ongoing Retainer', next:'Next Steps'};
 let keyAspects = DEFAULT_KEYASPECTS.map(a=>({...a}));
 let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
+let retTiers = DEFAULT_RETTIERS.map(t=>({...t}));   // monthly retainer columns
+let retAdhocOn = true;                              // show the Ad Hoc comparison column
 let optTiers = DEFAULT_OPTTIERS.slice();
 let optRows = DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
 let optNotes = [];   // cost explanations {label, text} — quote options
@@ -456,6 +459,35 @@ function renderKeyAspects(){
     w.appendChild(d);
   });
 }
+
+// ---- monthly retainer tiers (editable columns) ----
+const MAX_RET_COLS = 4;   // Ad Hoc + tiers must fit across the page (matches Quote Options)
+function retColCount(){ return (retAdhocOn?1:0)+retTiers.length; }
+function renderRetTiers(){
+  const w=document.getElementById('ret-tiers'); if(!w) return; w.innerHTML='';
+  retTiers.forEach((t,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+      <div class="row">
+        <label class="f">Videos / month<input type="number" class="rt-n" value="${t.videos}"></label>
+        <label class="f">Price / month (£)<input type="number" class="rt-p" value="${t.price}"></label>
+      </div>`;
+    d.querySelector('.x').onclick=()=>{retTiers.splice(i,1);renderRetTiers();render();};
+    d.querySelector('.rt-n').oninput=e=>{t.videos=parseFloat(e.target.value)||0;render();};
+    d.querySelector('.rt-p').oninput=e=>{t.price=parseFloat(e.target.value)||0;render();};
+    w.appendChild(d);
+  });
+  makeDraggable(w, retTiers, renderRetTiers);
+}
+function syncAdhocField(){ const f=document.getElementById('adhoc-rate-f'); if(f) f.style.display=retAdhocOn?'':'none'; }
+document.getElementById('add-tier').onclick=()=>{
+  if(retColCount()>=MAX_RET_COLS){ alert('Up to four columns fit across the page — remove the Ad Hoc column or a tier first.'); return; }
+  retTiers.push({videos:1, price:500}); renderRetTiers(); render();
+};
+document.getElementById('chk-adhoc').onchange=e=>{
+  if(e.target.checked && retColCount()+1>MAX_RET_COLS){ e.target.checked=false; alert('Up to four columns fit across the page — remove a tier first.'); return; }
+  retAdhocOn=e.target.checked; syncAdhocField(); render();
+};
 
 // ---- project quote line items (editable) ----
 document.getElementById('add-quote').onclick=()=>{
@@ -636,18 +668,31 @@ function footer(n){return `<div class="foot"><div class="b">${esc(val('i-client'
 
 // ---- pricing calc ----
 function calc(){
-  const ad=num('p-adhoc');
-  const an=num('p-a-n'), ap=num('p-a-p');
-  const bn=num('p-b-n'), bp=num('p-b-p');
-  return {ad,an,ap,bn,bp,
-    aeff:an?ap/an:0, beff:bn?bp/bn:0,
-    asav:an*ad-ap, bsav:bn*ad-bp};
+  const adhocOn=retAdhocOn, rate=num('p-adhoc');
+  const tiers=retTiers.map(t=>{ const videos=+t.videos||0, price=+t.price||0;
+    return {videos, price, eff:videos?price/videos:0}; });
+  // baseline for the saving row: the ad-hoc rate when that column is shown,
+  // otherwise the left-most tier's effective rate (e.g. 4 videos vs the 2-video tier)
+  const baseEff = adhocOn ? rate : (tiers.length?tiers[0].eff:0);
+  tiers.forEach((t,i)=>{
+    t.isBase = !adhocOn && i===0;                 // the baseline column shows no saving
+    t.sav = t.isBase ? 0 : t.videos*baseEff - t.price;
+  });
+  // saving row only makes sense with something to compare against
+  const showSav = tiers.length>0 && (adhocOn || tiers.length>=2);
+  return {label:val('i-retlabel'), adhocOn, rate, tiers, showSav,
+          baseVideos: tiers.length?tiers[0].videos:0};
 }
 function renderCalc(){
   const c=calc();
-  document.getElementById('calc-out').innerHTML=
-   `Effective rate — Tier A <b>${gbp(c.aeff)}</b>/video · Tier B <b>${gbp(c.beff)}</b>/video<br>
-    Saving vs ad-hoc — A <b>${gbp(c.asav)}</b> · B <b>${gbp(c.bsav)}</b> per month`;
+  const eff = c.tiers.map(t=>`${t.videos}/mo <b>${gbp(t.eff)}</b>`).join(' · ') || 'add a tier';
+  let html='Effective rate/video — '+eff;
+  if(c.showSav){
+    const base = c.adhocOn ? 'ad-hoc' : `${c.baseVideos}/mo`;
+    const sav = c.tiers.filter(t=>!t.isBase && t.sav>0).map(t=>`${t.videos}/mo <b>${gbp(t.sav)}</b>`).join(' · ') || '—';
+    html += `<br>Saving vs ${base} — ${sav} per month`;
+  }
+  document.getElementById('calc-out').innerHTML=html;
 }
 // ---- project quote calc ----
 function quoteCalc(){
@@ -698,15 +743,18 @@ function secHTML(id){
       return `<div class="bar mt">PORTFOLIO</div>
       ${val('i-portintro').trim()?`<p>${esc(val('i-portintro'))}</p>`:''}
       ${url?`<p style="margin-top:4pt;"><a href="${href}" style="display:inline-block;background:var(--blue);color:#fff;text-decoration:none;font-weight:600;padding:7pt 18pt;border-radius:6px;">${label} →</a></p>`:''}`; }
-   case 'scope': return `<div class="bar mt">MONTHLY RETAINER OPTIONS</div>
+   case 'scope': { const t=c.tiers, hasAd=c.adhocOn;
+      const savLabel = hasAd ? 'Saving vs ad hoc' : `Saving vs ${c.baseVideos} / month`;
+      const savCell = x => (x.isBase || x.sav<=0) ? '<td class="c">—</td>' : `<td class="c save">Save ${gbp(x.sav)}/mo</td>`;
+      return `<div class="bar mt">MONTHLY RETAINER OPTIONS</div>
       <table class="price"><thead><tr>
-        <th class="rh">&nbsp;</th><th class="c">Ad Hoc</th><th class="c">${c.an} / month</th><th class="c">${c.bn} / month</th>
+        <th class="rh">&nbsp;</th>${hasAd?'<th class="c">Ad Hoc</th>':''}${t.map(x=>`<th class="c">${x.videos} / month</th>`).join('')}
       </tr></thead><tbody>
-        <tr><th class="rh">Short-form lifestyle video</th><td class="c">${gbp(c.ad)}/video</td><td class="c">${gbp(c.ap)}/mo</td><td class="c">${gbp(c.bp)}/mo</td></tr>
-        <tr class="rate"><th class="rh">Effective rate per video</th><td class="c">${gbp(c.ad)}</td><td class="c">${gbp(c.aeff)}</td><td class="c">${gbp(c.beff)}</td></tr>
-        <tr><th class="rh">Saving vs ad hoc</th><td class="c">—</td><td class="c save">Save ${gbp(c.asav)}/mo</td><td class="c save">Save ${gbp(c.bsav)}/mo</td></tr>
+        <tr><th class="rh">${esc(c.label)}</th>${hasAd?`<td class="c">${gbp(c.rate)}/video</td>`:''}${t.map(x=>`<td class="c">${gbp(x.price)}/mo</td>`).join('')}</tr>
+        <tr class="rate"><th class="rh">Effective rate per video</th>${hasAd?`<td class="c">${gbp(c.rate)}</td>`:''}${t.map(x=>`<td class="c">${gbp(x.eff)}</td>`).join('')}</tr>
+        ${c.showSav?`<tr><th class="rh">${savLabel}</th>${hasAd?'<td class="c">—</td>':''}${t.map(savCell).join('')}</tr>`:''}
       </tbody></table>
-      <p class="note">Engels Productions is not VAT registered. Prices subject to T&amp;Cs, travel expenses and changes to scope. Creative direction billed separately by Sigrid Media.</p>`;
+      <p class="note">${VAT_NOTE}</p>`; }
    case 'quote': { const q=quoteCalc(); const sd=showQuoteDays, span=sd?4:2;
       return `<div class="bar mt">PROJECT QUOTE</div>
       ${val('i-quoteintro').trim()?`<p>${esc(val('i-quoteintro'))}</p>`:''}
@@ -718,7 +766,7 @@ function secHTML(id){
         <tr><td colspan="${span}" style="text-align:right;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
         <tr class="total"><td colspan="${span}" style="text-align:right;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>
       </tbody></table>
-      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs, travel expenses and changes to scope.</p>
+      <p class="note">${VAT_NOTE}</p>
       ${notesHtmlFor(quoteNotes)?`<div style="margin-top:22pt;">${notesHtmlFor(quoteNotes)}</div>`:''}`; }
    case 'options': { const cols=optCols();
       const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
@@ -735,7 +783,7 @@ function secHTML(id){
         <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:''}
         <tr class="total"><td>Total investment</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>
       </tbody></table>
-      <p class="note">Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs and changes to scope.</p>
+      <p class="note">${VAT_NOTE}</p>
       ${notesHtml?`<div style="margin-top:22pt;">${notesHtml}</div>`:''}`; }
    case 'rates': return `<div class="bar mt">ADDITIONAL DAY RATES</div>
       <p>Work outside the agreed monthly scope is scoped and quoted in advance at the following day rates, so you always know the cost before anything begins.</p>
@@ -877,7 +925,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','p-adhoc','p-a-n','p-a-p','p-b-n','p-b-p','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -887,6 +935,7 @@ function snapshot(){
   const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
   return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
           keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
+          retTiers:clone(retTiers), retAdhocOn,
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
           quoteNotes:clone(quoteNotes), showQuoteDays,
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
@@ -909,6 +958,16 @@ function applyState(st){
   customs = Array.isArray(st.customs) ? clone(st.customs) : [];
   keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
   quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
+  // retainer tiers: new drafts carry retTiers; older ones are migrated from the fixed A/B inputs
+  if(Array.isArray(st.retTiers)) retTiers = clone(st.retTiers);
+  else { const oi=st.inputs||{};
+    const legacy=[{videos:+oi['p-a-n']||0, price:+oi['p-a-p']||0},{videos:+oi['p-b-n']||0, price:+oi['p-b-p']||0}].filter(t=>t.videos||t.price);
+    retTiers = legacy.length ? legacy : DEFAULT_RETTIERS.map(t=>({...t}));
+  }
+  retAdhocOn = st.retAdhocOn!==false;
+  document.getElementById('chk-adhoc').checked = retAdhocOn;
+  // older drafts have no row label stored — fall back to the default rather than a stale value
+  if(!(st.inputs && 'i-retlabel' in st.inputs)) document.getElementById('i-retlabel').value='Short-form lifestyle video';
   optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
   if(!optTiers.length) optTiers = DEFAULT_OPTTIERS.slice();
   optRows = Array.isArray(st.optRows) ? clone(st.optRows) : DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
@@ -924,7 +983,8 @@ function applyState(st){
   coverIsDefault = st.coverIsDefault!==false;
   coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
   document.getElementById('i-cover').value='';
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
+  syncAdhocField();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
   refreshCover();
 }
 function loadStore(){
@@ -1025,7 +1085,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#p-adhoc,#p-a-n,#p-a-p,#p-b-n,#p-b-p,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#i-retlabel,#p-adhoc,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val')
   .forEach(el=>el.addEventListener('input',render));
 // ⌘B / Ctrl+B in any panel text field wraps the selection in **bold** markers
 document.querySelector('.panel').addEventListener('keydown',e=>{
@@ -1052,7 +1112,8 @@ if(drafts.length){
   const cur=drafts.find(d=>d.id===currentId)||drafts[0];
   currentId=cur.id; applyState(cur.state);
 }else{
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
+  syncAdhocField();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
   document.getElementById('i-date').value=todayStr(); render(); refreshCover();
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
