@@ -762,9 +762,9 @@ function secHTML(id){
         <th>Category</th><th>Description</th>${sd?'<th class="c">Day rate</th><th class="c">Days</th>':''}<th class="c">Total</th>
       </tr></thead><tbody>
         ${quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td>${sd?`<td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td>`:''}<td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`).join('')}
-        ${q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:right;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
-        <tr><td colspan="${span}" style="text-align:right;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
-        <tr class="total"><td colspan="${span}" style="text-align:right;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>
+        ${q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:left;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
+        <tr><td colspan="${span}" style="text-align:left;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
+        <tr class="total"><td colspan="${span}" style="text-align:left;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>
       </tbody></table>
       <p class="note">${VAT_NOTE}</p>
       ${notesHtmlFor(quoteNotes)?`<div style="margin-top:22pt;">${notesHtmlFor(quoteNotes)}</div>`:''}`; }
