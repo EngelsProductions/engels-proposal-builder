@@ -1012,6 +1012,16 @@ function loadStore(){
   if(!Array.isArray(drafts)) drafts=[];
   currentId=localStorage.getItem(CKEY)||null;
 }
+// message shown whenever the browser won't keep our drafts (full, or a Private/Incognito window)
+const NOSAVE_MSG='⚠ NOT SAVED — this browser isn’t storing your drafts. You may be in a Private/Incognito window, or storage is full. Switch to a normal window, and use Download to back up.';
+// round-trip probe: confirms a value written to localStorage is actually kept, so we can warn
+// up front about Private/Incognito windows, full storage, or block-storage settings
+function storageWorks(){
+  try{ const k='__ep_probe', v='ok'+Date.now();
+    localStorage.setItem(k,v); const ok=localStorage.getItem(k)===v; localStorage.removeItem(k);
+    return ok;
+  }catch(e){ return false; }
+}
 let storageWarned=false;   // so we only interrupt once per run of failed saves
 function persist(){
   try{
@@ -1021,12 +1031,12 @@ function persist(){
     setStatus('All changes saved · '+timeStr(Date.now()));
     return true;
   }catch(e){
-    // storage is full (usually cover photos): the draft is only in memory and WILL be lost on
-    // refresh. Make that loud, and offer an immediate file backup so no work is lost silently.
-    setStatus('⚠ NOT SAVED — this browser’s storage is full. Download to back up, then delete old drafts to free space.');
+    // the draft is only in memory and WILL be lost on refresh — make that loud, and offer an
+    // immediate file backup so no work is lost silently.
+    setStatus(NOSAVE_MSG);
     if(!storageWarned){
       storageWarned=true;
-      if(confirm('This browser’s storage is full, so your latest change could NOT be saved — it will be lost if you refresh.\n\nDownload a backup of this draft now so you don’t lose it?')){
+      if(confirm('This browser isn’t saving your drafts (a Private/Incognito window, or storage is full), so your latest change will be lost if you refresh.\n\nDownload a backup now so you don’t lose it?')){
         try{ downloadDraft(); }catch(_){}
       }
     }
@@ -1144,6 +1154,10 @@ document.getElementById('btn-print').onclick=()=>window.print();
 // ---- init: capture pristine defaults, then load saved drafts ----
 const DEFAULT_STATE = snapshot();
 loadStore();
+// if the browser won't persist (Private/Incognito window, full, or blocked), say so up front and
+// don't pop the save-failed prompt on every load — the banner below is the standing warning.
+const storageOK = storageWorks();
+if(!storageOK) storageWarned=true;
 if(drafts.length){
   const cur=drafts.find(d=>d.id===currentId)||drafts[0];
   currentId=cur.id; applyState(cur.state);
@@ -1154,6 +1168,10 @@ if(drafts.length){
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
+if(!storageOK){
+  const el=document.getElementById('draft-status');
+  if(el){ el.textContent=NOSAVE_MSG; el.style.color='#c0392b'; el.style.fontWeight='700'; }
+}
 
 // ---- collapsible control-panel sections (accordion) ----
 document.querySelectorAll('.panel > .grp').forEach(grp=>{
