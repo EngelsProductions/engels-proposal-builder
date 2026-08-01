@@ -1043,7 +1043,17 @@ function persist(){
     return false;
   }
 }
-function setStatus(t){ const el=document.getElementById('draft-status'); if(el) el.textContent=t; }
+function setStatus(t){
+  const el=document.getElementById('draft-status'); if(!el) return;
+  el.textContent=t;
+  // any warning (starts with ⚠) shows as a red alert box; normal messages revert to the muted hint
+  if(/^\s*⚠/.test(t)){
+    el.style.color='#c0392b'; el.style.fontWeight='700';
+    el.style.background='#fdecea'; el.style.padding='7px 9px'; el.style.borderRadius='6px';
+  }else{
+    el.style.color=el.style.fontWeight=el.style.background=el.style.padding=el.style.borderRadius='';
+  }
+}
 function timeStr(t){ if(!t) return ''; const d=new Date(t);
   return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
 function uid(){ return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
@@ -1168,10 +1178,7 @@ if(drafts.length){
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
-if(!storageOK){
-  const el=document.getElementById('draft-status');
-  if(el){ el.textContent=NOSAVE_MSG; el.style.color='#c0392b'; el.style.fontWeight='700'; }
-}
+if(!storageOK) setStatus(NOSAVE_MSG);
 
 // ---- collapsible control-panel sections (accordion) ----
 document.querySelectorAll('.panel > .grp').forEach(grp=>{
