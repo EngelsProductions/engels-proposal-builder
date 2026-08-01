@@ -1012,10 +1012,26 @@ function loadStore(){
   if(!Array.isArray(drafts)) drafts=[];
   currentId=localStorage.getItem(CKEY)||null;
 }
+let storageWarned=false;   // so we only interrupt once per run of failed saves
 function persist(){
-  try{ localStorage.setItem(DKEY,JSON.stringify(drafts)); localStorage.setItem(CKEY,currentId||'');
-       setStatus('All changes saved · '+timeStr(Date.now())); }
-  catch(e){ setStatus('⚠ Browser storage is full — use Download to back up, then delete old drafts.'); }
+  try{
+    localStorage.setItem(DKEY,JSON.stringify(drafts));
+    localStorage.setItem(CKEY,currentId||'');
+    storageWarned=false;
+    setStatus('All changes saved · '+timeStr(Date.now()));
+    return true;
+  }catch(e){
+    // storage is full (usually cover photos): the draft is only in memory and WILL be lost on
+    // refresh. Make that loud, and offer an immediate file backup so no work is lost silently.
+    setStatus('⚠ NOT SAVED — this browser’s storage is full. Download to back up, then delete old drafts to free space.');
+    if(!storageWarned){
+      storageWarned=true;
+      if(confirm('This browser’s storage is full, so your latest change could NOT be saved — it will be lost if you refresh.\n\nDownload a backup of this draft now so you don’t lose it?')){
+        try{ downloadDraft(); }catch(_){}
+      }
+    }
+    return false;
+  }
 }
 function setStatus(t){ const el=document.getElementById('draft-status'); if(el) el.textContent=t; }
 function timeStr(t){ if(!t) return ''; const d=new Date(t);
