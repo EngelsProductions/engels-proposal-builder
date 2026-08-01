@@ -812,6 +812,18 @@ function secHTML(id){
   return '';
 }
 
+// Key Terms is split into one block per term so a long list flows across pages,
+// keeping each term whole. The section bar rides with the first term so it's never orphaned.
+function termsBlocks(){
+  const all = terms.concat(chkRetTerms ? retainerTerms : []);
+  const bar = `<div class="bar mt">KEY TERMS &amp; CONDITIONS</div>`;
+  if(!all.length) return [{id:'terms', html:bar}];
+  return all.map((t,i)=>({
+    id: i===0 ? 'terms' : 'terms-'+i,
+    html: (i===0 ? bar : '') + `<div class="terms"><h4>${esc(t.h)}</h4><p>${esc(t.b)}</p></div>`
+  }));
+}
+
 // ---- main render: paginate sections across pages ----
 let pageOf = {};
 let tocTwoCol = false;
@@ -828,7 +840,8 @@ function render(){
         if(placed) return;
         placed=true;
         bl.push({id:'intro-group', members:[...groupIds], html:groupIds.map(x=>secHTML(x)).join('')});
-      } else bl.push({id, html:secHTML(id)});
+      } else if(id==='terms'){ termsBlocks().forEach(b=>bl.push(b)); }
+      else bl.push({id, html:secHTML(id)});
     });
     customs.forEach((c,idx)=>bl.push({id:'custom'+idx, html:`<div class="bar mt">${esc(c.title)}</div><p>${esc(c.body)}</p>`}));
     return bl;
