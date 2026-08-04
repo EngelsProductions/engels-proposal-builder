@@ -187,8 +187,10 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 .ai-note{font-size:11.5px;line-height:1.5;color:var(--ink-soft);margin:10px 0 0;}
 .ai-note.err{color:#c0392b;}
 .ai-note.ok{color:var(--navy);}
-.ai-undo{margin-top:9px;display:none;}
-.ai-undo.show{display:block;}
+.ai-hist{display:none;gap:8px;margin-top:9px;}
+.ai-hist.show{display:flex;}
+.ai-hist .btn{margin:0;flex:1;}
+.ai-hist .btn:disabled{opacity:.4;cursor:default;filter:none;}
 @media print{
   .ai-fab,.ai-panel{display:none!important;}
   @page{size:A4;margin:0;}
@@ -378,7 +380,10 @@ If you have any questions about pricing or scope, please do get in touch.</texta
       <button class="btn" id="ai-send" style="flex:1;">Make the change</button>
     </div>
     <p class="ai-note" id="ai-note">Changes are applied to the proposal straight away. You can undo them.</p>
-    <button class="btn ghost ai-undo" id="ai-undo">Undo that change</button>
+    <div class="ai-hist" id="ai-hist">
+      <button class="btn ghost" id="ai-undo" title="Undo the last AI change">↶ Undo</button>
+      <button class="btn ghost" id="ai-redo" title="Reapply the change you just undid">Redo ↷</button>
+    </div>
   </div>
 </div>
 <button class="ai-fab" id="ai-fab" title="Ask for a change">✦</button>
@@ -1555,8 +1560,21 @@ const AI_APPLY = {
   const fab=document.getElementById('ai-fab'), panel=document.getElementById('ai-panel');
   const input=document.getElementById('ai-input'), send=document.getElementById('ai-send');
   const mic=document.getElementById('ai-mic'), note=document.getElementById('ai-note');
-  const undo=document.getElementById('ai-undo');
-  let before=null;
+  const undo=document.getElementById('ai-undo'), redo=document.getElementById('ai-redo');
+  const hist=document.getElementById('ai-hist');
+
+  // step back and forward through AI changes. Snapshots hold the embedded photos, so the
+  // depth is capped rather than unbounded; asking for something new drops the redo branch,
+  // exactly as an editor's history does.
+  const MAX_HISTORY = 10;
+  const past=[], future=[];
+  const syncHistory=()=>{
+    hist.classList.toggle('show', past.length>0 || future.length>0);
+    undo.disabled = !past.length; redo.disabled = !future.length;
+    undo.textContent = past.length>1 ? '↶ Undo ('+past.length+')' : '↶ Undo';
+  };
+
+  syncHistory();   // start with both disabled rather than relying on the bar being hidden
 
   const say=(msg,kind)=>{ note.textContent=msg; note.className='ai-note'+(kind?' '+kind:''); };
   const openPanel=v=>{ panel.classList.toggle('open',v); if(v) input.focus(); };
@@ -1565,9 +1583,16 @@ const AI_APPLY = {
   document.getElementById('ai-close').onclick=()=>openPanel(false);
 
   undo.onclick=()=>{
-    if(!before) return;
-    applyState(clone(before)); before=null;
-    undo.classList.remove('show'); say('Change undone.');
+    if(!past.length) return;
+    future.push(snapshot());
+    applyState(clone(past.pop()));
+    syncHistory(); say(past.length?'Change undone. Undo again to step further back.':'Change undone.');
+  };
+  redo.onclick=()=>{
+    if(!future.length) return;
+    past.push(snapshot());
+    applyState(clone(future.pop()));
+    syncHistory(); say('Change reapplied.');
   };
 
   async function run(){
@@ -1593,7 +1618,10 @@ const AI_APPLY = {
       });
 
       if(done.length){
-        before=snapshotBefore; undo.classList.add('show');
+        past.push(snapshotBefore);
+        if(past.length>MAX_HISTORY) past.shift();
+        future.length=0;               // a new change abandons anything that was redoable
+        syncHistory();
         render(); input.value='';
       }
       // a change can land in a switched-off section and be invisible — say so rather than
