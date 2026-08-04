@@ -610,9 +610,9 @@ function renderAboutPhotos(){
 // Consecutive photos marked "overlap" join the one before them into a cluster that floats as
 // a single unit, each laid over a bottom corner of the one underneath. The cluster is scaled
 // so however many photos it holds, it still fits the width its first photo asked for.
-const PH_IN = 74;    // a clustered photo's width, before scaling, as % of the cluster
-const PH_STEP = 26;  // sideways shift per overlapping photo
-const PH_RISE = 22;  // how far each overlapping photo rides up over the one below
+const PH_OVER_X = 0.35;   // how much of the narrower photo its neighbour's corner covers
+const PH_OVER_Y = 0.28;   // how far up the photo below it rides, as a fraction of that photo's height
+const PH_REFLECT = 0.15;  // a reflection's height, as a fraction of its photo's width
 function aboutClusters(){
   const out=[];
   aboutPhotos.forEach(p=>{ if(out.length && p.overlap) out[out.length-1].push(p); else out.push([p]); });
@@ -621,23 +621,35 @@ function aboutClusters(){
 // one floated group with its frames and reflections. Each photo keeps its own shape — portrait
 // and landscape sit together as they do in the printed proposals — so the frame and the
 // reflection are both driven by the photo's stored aspect ratio.
+const phAr = p => (+p.ar>0 ? +p.ar : 0.666);
+const phFrame = (p,style)=>{ const ar=(phAr(p)*100).toFixed(2);
+  return `<div class="pi"${style?` style="${style}"`:''}>
+    <div class="fr" style="padding-bottom:${ar}%;"><img src="${p.src}"></div>
+    <div class="rf"><div class="in" style="padding-bottom:${ar}%;"><img src="${p.src}"></div></div>
+  </div>`; };
 function photoHTML(group){
   const g = Array.isArray(group) ? group : [group], p0 = g[0];
-  const offs=[0];
-  for(let i=1;i<g.length;i++) offs.push(offs[i-1] + (g[i].corner==='bl' ? -PH_STEP : PH_STEP));
-  const min=Math.min(...offs), span=Math.max(...offs)+PH_IN-min;
-  const w=PH_IN/span*100, rise=PH_RISE*(w/PH_IN);
+  // the float takes the width of the largest photo in the group
+  const wide = g.reduce((m,p)=>Math.max(m, PH_W[p.size]||PH_W.m), 0);
+  const open = `<div class="ph ${p0.side==='r'?'r':'l'}" style="width:${wide}%;">`;
+  if(g.length===1) return open + phFrame(p0,'') + '</div>';
+
+  // Small / Medium / Large keep their relative sizes inside a cluster; the group is then
+  // scaled as a whole to fill the float, so one photo can be larger than its neighbour.
+  const b = g.map(p=>PH_W[p.size]||PH_W.m);
+  const off=[0];
+  for(let i=1;i<g.length;i++){
+    const ov = PH_OVER_X*Math.min(b[i-1],b[i]);
+    off.push(g[i].corner==='bl' ? off[i-1]+ov-b[i] : off[i-1]+b[i-1]-ov);
+  }
+  const min=Math.min(...off), span=Math.max(...off.map((o,i)=>o+b[i]))-min, k=100/span;
   const frames=g.map((p,i)=>{
-    const ar=(+p.ar>0?+p.ar:0.666)*100;
-    const style = g.length===1 ? ''
-      : `width:${w.toFixed(1)}%;margin-left:${((offs[i]-min)/span*100).toFixed(1)}%;`
-        + (i?`margin-top:-${rise.toFixed(1)}%;`:'');
-    return `<div class="pi"${style?` style="${style}"`:''}>
-      <div class="fr" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div>
-      <div class="rf"><div class="in" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div></div>
-    </div>`;
+    let s=`width:${(b[i]*k).toFixed(1)}%;margin-left:${((off[i]-min)*k).toFixed(1)}%;`;
+    // rise far enough to clear the previous photo's reflection, then over its bottom edge
+    if(i) s+=`margin-top:-${(b[i-1]*k*(PH_REFLECT+PH_OVER_Y*phAr(g[i-1]))).toFixed(1)}%;`;
+    return phFrame(p,s);
   }).join('');
-  return `<div class="ph ${p0.side==='r'?'r':'l'}" style="width:${PH_W[p0.size]||PH_W.m}%;">${frames}</div>`;
+  return open + frames + '</div>';
 }
 
 // ---- key aspects (editable list) ----
