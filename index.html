@@ -156,6 +156,13 @@ table.rates th,table.rates td{padding:6.5pt 12pt;border-bottom:1px solid var(--l
 table.rates thead th{background:var(--navy);color:#fff;font-weight:600;}
 table.rates td.r{text-align:right;font-weight:600;color:var(--navy);}
 .note{font-size:10pt;color:var(--ink);line-height:1.6;margin:9pt 0 0;}
+/* cost-explanation bullets — a line typed as "- point" in the explanation box. Same 10pt copy as
+   the paragraphs around it, hung off a blue marker so wrapped lines line up under the text rather
+   than under the bullet. Must sit after ".pg p" — equal specificity, so source order wins. */
+.blts{margin:0 0 9pt;}
+.blts p{margin:0 0 4pt;padding-left:13pt;position:relative;}
+.blts p:last-child{margin:0;}
+.blts p::before{content:"•";position:absolute;left:2pt;color:var(--blue);font-weight:700;}
 h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 .terms h4{font-size:11pt;font-weight:600;color:var(--navy);margin:11pt 0 3pt;}
 .terms p{font-size:10pt;margin:0 0 3pt;line-height:1.6;}
@@ -322,7 +329,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-disc-val" value="0"></label>
       </div>
       <div class="calc" id="quote-out"></div>
-      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional)</label>
+      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — start a line with “- ” for a bullet point</label>
       <div id="quote-notes"></div>
       <button class="btn ghost" id="add-quotenote">+ Add explanation</button>
       <p class="hint">Tick “Project Quote (one-off)” above to include this instead of the retainer table.</p>
@@ -346,7 +353,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-optdisc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-optdisc-val" value="0"></label>
       </div>
-      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional)</label>
+      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — start a line with “- ” for a bullet point</label>
       <div id="opt-notes"></div>
       <button class="btn ghost" id="add-optnote">+ Add explanation</button>
       <p class="hint">Use ✓ marks, £ amounts, or short text in any cell. Prefix a number with # for a plain count — <b>3</b> shows as £3, <b>#3</b> shows as 3. £ amounts auto-sum into the total; ✓, text and # counts don’t. Drag the grip to reorder rows. Tick “Quote Options” in the sections list to include it.</p>
@@ -804,9 +811,38 @@ function renderNoteList(arr, elId, rerender){
   makeDraggable(w, arr, rerender);
 }
 // cost explanations rendered into the proposal
+// The text is plain, but a line starting with "- " (or "• ") becomes a bullet, so an explanation can
+// set out several points instead of running as one paragraph. Consecutive bullet lines group into a
+// single block; every other line stays a paragraph and behaves exactly as it did before.
+function noteBody(text){
+  const out=[]; let bullets=[], para=[];
+  const flushPara=()=>{
+    while(para.length && !para[para.length-1].trim()) para.pop();   // no trailing <br> before a bullet run
+    if(para.length) out.push(`<p>${para.map(esc).join('<br>')}</p>`);
+    para=[];
+  };
+  const flushBullets=()=>{
+    if(bullets.length) out.push(`<div class="blts">${bullets.map(b=>`<p>${esc(b)}</p>`).join('')}</div>`);
+    bullets=[];
+  };
+  (text||'').split('\n').forEach(line=>{
+    const m=line.match(/^\s*[-•]\s+(.+)$/);
+    if(m){ flushPara(); bullets.push(m[1]); }
+    else { flushBullets(); para.push(line); }
+  });
+  flushPara(); flushBullets();
+  return out;
+}
+function noteHtmlFor(n){
+  const lead = n.label ? `<strong>${esc(n.label)}:</strong>` : '';
+  const blocks = noteBody(n.text);
+  // the label leads the first paragraph; with nothing but bullets under it, it sits on its own line above
+  if(blocks.length && blocks[0].startsWith('<p>')) blocks[0]=blocks[0].replace('<p>', `<p>${lead}${lead?' ':''}`);
+  else if(lead) blocks.unshift(`<p>${lead}</p>`);
+  return blocks.join('');
+}
 function notesListFor(arr){
-  return arr.filter(n=>(n.text||'').trim()||(n.label||'').trim())
-    .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`);
+  return arr.filter(n=>(n.text||'').trim()||(n.label||'').trim()).map(noteHtmlFor);
 }
 function notesHtmlFor(arr){ return notesListFor(arr).join(''); }
 document.getElementById('add-optrow').onclick=()=>{ optRows.push({cat:'New category', vals:{}}); renderOptions(); render(); };

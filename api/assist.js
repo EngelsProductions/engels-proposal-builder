@@ -47,15 +47,16 @@ const TOOLS = [
   {
     name: "add_cost_explanation",
     description:
-      "Add a cost explanation beneath a pricing table — a short bold label and a paragraph explaining " +
+      "Add a cost explanation beneath a pricing table — a short bold label and text explaining " +
       "why something costs what it does or what it covers. This is the right tool for explaining an " +
-      "approach, a crew choice, or what a line item includes.",
+      "approach, a crew choice, or what a line item includes, and the one place bullet points can sit " +
+      "outside the Key Aspects box.",
     input_schema: {
       type: "object",
       properties: {
         section: { type: "string", enum: ["quote", "options"], description: "Which pricing table it sits under." },
         label: { type: "string", description: "Short bold lead-in, e.g. 'Why four camera angles'." },
-        text: { type: "string", description: "The explanation, one paragraph." },
+        text: { type: "string", description: "The explanation. Normally one paragraph; where the user wants points set out, put each on its own line starting with '- '." },
       },
       required: ["section", "label", "text"],
     },
@@ -69,7 +70,7 @@ const TOOLS = [
         section: { type: "string", enum: ["quote", "options"] },
         index: { type: "integer", description: "Zero-based position in that section's explanation list." },
         label: { type: "string", description: "New label. Omit to leave unchanged." },
-        text: { type: "string", description: "New text. Omit to leave unchanged." },
+        text: { type: "string", description: "New text. Lines starting with '- ' become bullets. Omit to leave unchanged." },
       },
       required: ["section", "index"],
     },
@@ -336,6 +337,11 @@ deliberate — if a request can only be satisfied by changing the design, say so
 Bulleted points are presented in this proposal as lines in the Key Aspects callout box: a bold label
 followed by a sentence. When asked for bullet points, call add_key_aspect once per point. Do not try to
 write dashes, asterisks or numbered lists into a paragraph — that is not how this document sets out lists.
+
+The one exception is the text of a cost explanation, which may set out points beneath a pricing table.
+There, a line beginning "- " is rendered as a bullet: put each point on its own line, starting with "- ",
+and keep any ordinary prose on separate lines above or below them. This is a plain-text convention the
+builder understands, not markup — never use it in any other field, and never write bullets any other way.
 
 Writing style, which you must match exactly:
 - British English spelling: optimise, colour, programme, specialise, organise.
