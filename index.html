@@ -113,6 +113,10 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .ph{margin:1pt 0 7pt;clear:both;}
 .ph.l{float:left;margin-right:13pt;}
 .ph.r{float:right;margin-left:13pt;}
+/* photos in a cluster are laid over a bottom corner of the one underneath. Kept in normal
+   flow with negative margins rather than absolute positioning, so the cluster still reports
+   a real height and the paginator measures it correctly. Later siblings paint on top. */
+.ph .pi{position:relative;}
 .ph .fr{position:relative;border:3px solid #fff;border-radius:8px;
   box-shadow:0 2px 9px rgba(20,30,60,.26);overflow:hidden;background:#eef4f9;}
 .ph .fr img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
@@ -256,7 +260,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <label class="f" style="margin:14px 0 5px;">Photos (optional)</label>
       <div id="about-photos"></div>
       <label class="f"><input type="file" id="i-aboutphoto" accept="image/*" multiple></label>
-      <p class="hint">Photos sit in the About section with the copy wrapping around them. Drag to reorder; each one can go left or right at three sizes.</p>
+      <p class="hint">Photos sit in the About section with the copy wrapping around them. Drag to reorder; each one can go left or right at three sizes. Tick “Lay over the photo above” to overlap two or more into a single group.</p>
       <p class="hint"><b>Bold:</b> select text and press ⌘B (Ctrl+B), or wrap it in <b>**double asterisks**</b>. Works in every text box in this panel.</p>
     </div>
 
@@ -577,22 +581,55 @@ function renderAboutPhotos(){
           <option value="m"${p.size==='m'?' selected':''}>Medium</option>
           <option value="l"${p.size==='l'?' selected':''}>Large</option>
         </select></label>
-      </div>`;
+      </div>` + (i ? `
+      <label class="toggle" style="margin:8px 0 0;"><input type="checkbox" class="ph-ovl"${p.overlap?' checked':''}><span>Lay over the photo above</span></label>
+      <label class="f ph-cnr-wrap" style="margin-top:7px;${p.overlap?'':'display:none;'}">Corner<select class="ph-cnr">
+        <option value="br"${p.corner!=='bl'?' selected':''}>Bottom right</option>
+        <option value="bl"${p.corner==='bl'?' selected':''}>Bottom left</option>
+      </select></label>` : '');
     d.querySelector('.x').onclick=()=>{aboutPhotos.splice(i,1);renderAboutPhotos();render();};
     d.querySelector('.ph-side').onchange=e=>{p.side=e.target.value;render();};
     d.querySelector('.ph-size').onchange=e=>{p.size=e.target.value;render();};
+    const ovl=d.querySelector('.ph-ovl');
+    if(ovl) ovl.onchange=e=>{ p.overlap=e.target.checked; renderAboutPhotos(); render(); };
+    const cnr=d.querySelector('.ph-cnr');
+    if(cnr) cnr.onchange=e=>{ p.corner=e.target.value; render(); };
     w.appendChild(d);
   });
   makeDraggable(w, aboutPhotos, renderAboutPhotos);
 }
-// one floated, framed photo with its reflection. Each keeps its own shape — portrait and
-// landscape shots sit side by side down the page as they do in the printed proposals —
-// so the frame and the reflection are both driven by the photo's stored aspect ratio.
-const photoHTML = p => { const ar=(+p.ar>0?+p.ar:0.666)*100;
-  return `<div class="ph ${p.side==='r'?'r':'l'}" style="width:${PH_W[p.size]||PH_W.m}%;">
-  <div class="fr" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div>
-  <div class="rf"><div class="in" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div></div>
-</div>`; };
+// Consecutive photos marked "overlap" join the one before them into a cluster that floats as
+// a single unit, each laid over a bottom corner of the one underneath. The cluster is scaled
+// so however many photos it holds, it still fits the width its first photo asked for.
+const PH_IN = 74;    // a clustered photo's width, before scaling, as % of the cluster
+const PH_STEP = 26;  // sideways shift per overlapping photo
+const PH_RISE = 22;  // how far each overlapping photo rides up over the one below
+function aboutClusters(){
+  const out=[];
+  aboutPhotos.forEach(p=>{ if(out.length && p.overlap) out[out.length-1].push(p); else out.push([p]); });
+  return out;
+}
+// one floated group with its frames and reflections. Each photo keeps its own shape — portrait
+// and landscape sit together as they do in the printed proposals — so the frame and the
+// reflection are both driven by the photo's stored aspect ratio.
+function photoHTML(group){
+  const g = Array.isArray(group) ? group : [group], p0 = g[0];
+  const offs=[0];
+  for(let i=1;i<g.length;i++) offs.push(offs[i-1] + (g[i].corner==='bl' ? -PH_STEP : PH_STEP));
+  const min=Math.min(...offs), span=Math.max(...offs)+PH_IN-min;
+  const w=PH_IN/span*100, rise=PH_RISE*(w/PH_IN);
+  const frames=g.map((p,i)=>{
+    const ar=(+p.ar>0?+p.ar:0.666)*100;
+    const style = g.length===1 ? ''
+      : `width:${w.toFixed(1)}%;margin-left:${((offs[i]-min)/span*100).toFixed(1)}%;`
+        + (i?`margin-top:-${rise.toFixed(1)}%;`:'');
+    return `<div class="pi"${style?` style="${style}"`:''}>
+      <div class="fr" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div>
+      <div class="rf"><div class="in" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="ph ${p0.side==='r'?'r':'l'}" style="width:${PH_W[p0.size]||PH_W.m}%;">${frames}</div>`;
+}
 
 // ---- key aspects (editable list) ----
 document.getElementById('add-ka').onclick=()=>{
@@ -958,9 +995,10 @@ function aboutChunks(){
   const paras = val('i-about').split(/\n\n+/).filter(t=>t.trim()).map(t=>`<p>${esc(t)}</p>`);
   paras.unshift(`<p><span class="lead">${esc(val('i-lead'))}</span></p>`);
   if(!aboutPhotos.length) return [paras.join('')];
-  const per = Math.max(1, Math.ceil(paras.length/aboutPhotos.length));
-  const out = aboutPhotos.map((p,i)=> photoHTML(p) + paras.slice(i*per,(i+1)*per).join(''));
-  const spare = paras.slice(aboutPhotos.length*per).join('');
+  const clusters = aboutClusters();   // an overlapping group flows as one unit
+  const per = Math.max(1, Math.ceil(paras.length/clusters.length));
+  const out = clusters.map((c,i)=> photoHTML(c) + paras.slice(i*per,(i+1)*per).join(''));
+  const spare = paras.slice(clusters.length*per).join('');
   if(spare) out.push(spare);
   return out;
 }
