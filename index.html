@@ -584,10 +584,11 @@ function renderNoteList(arr, elId, rerender){
   makeDraggable(w, arr, rerender);
 }
 // cost explanations rendered into the proposal
-function notesHtmlFor(arr){
+function notesListFor(arr){
   return arr.filter(n=>(n.text||'').trim()||(n.label||'').trim())
-    .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`).join('');
+    .map(n=>`<p>${n.label?`<strong>${esc(n.label)}:</strong> `:''}${esc(n.text)}</p>`);
 }
+function notesHtmlFor(arr){ return notesListFor(arr).join(''); }
 document.getElementById('add-optrow').onclick=()=>{ optRows.push({cat:'New category', vals:{}}); renderOptions(); render(); };
 document.getElementById('add-optnote').onclick=()=>{ optNotes.push({label:'',text:''}); renderOptions(); render(); };
 
@@ -762,36 +763,8 @@ function secHTML(id){
         ${c.showSav?`<tr><th class="rh">${savLabel}</th>${hasAd?'<td class="c">—</td>':''}${t.map(savCell).join('')}</tr>`:''}
       </tbody></table>
       <p class="note">${VAT_NOTE}</p>`; }
-   case 'quote': { const q=quoteCalc(); const sd=showQuoteDays, span=sd?4:2;
-      return `<div class="bar mt">PROJECT QUOTE</div>
-      ${val('i-quoteintro').trim()?`<p>${esc(val('i-quoteintro'))}</p>`:''}
-      <table class="price"><thead><tr>
-        <th>Category</th><th>Description</th>${sd?'<th class="c">Day rate</th><th class="c">Days</th>':''}<th class="c">Total</th>
-      </tr></thead><tbody>
-        ${quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td>${sd?`<td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td>`:''}<td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`).join('')}
-        ${q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:left;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
-        <tr><td colspan="${span}" style="text-align:left;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:''}
-        <tr class="total"><td colspan="${span}" style="text-align:left;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>
-      </tbody></table>
-      <p class="note">${VAT_NOTE}</p>
-      ${notesHtmlFor(quoteNotes)?`<div style="margin-top:22pt;">${notesHtmlFor(quoteNotes)}</div>`:''}`; }
-   case 'options': { const cols=optCols();
-      const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
-      const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
-      const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
-      const notesHtml=notesHtmlFor(optNotes);
-      return `<div class="bar mt">QUOTE OPTIONS</div>
-      ${val('i-optintro').trim()?`<p>${esc(val('i-optintro'))}</p>`:''}
-      <table class="price"><thead><tr>
-        <th class="rh">&nbsp;</th>${cols.map(c=>`<th class="c">${esc(c)}</th>`).join('')}
-      </tr></thead><tbody>
-        ${optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`).join('')}
-        ${hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
-        <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:''}
-        <tr class="total"><td>Total investment</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>
-      </tbody></table>
-      <p class="note">${VAT_NOTE}</p>
-      ${notesHtml?`<div style="margin-top:22pt;">${notesHtml}</div>`:''}`; }
+   case 'quote': return priceSectionHTML(quoteParts());
+   case 'options': return priceSectionHTML(optionsParts());
    case 'rates': return `<div class="bar mt">ADDITIONAL DAY RATES</div>
       <p>Work outside the agreed monthly scope is scoped and quoted in advance at the following day rates, so you always know the cost before anything begins.</p>
       <table class="rates"><thead><tr><th>Role</th><th style="text-align:right;">Day rate (7 hrs)</th></tr></thead><tbody>
@@ -824,6 +797,94 @@ function termsBlocks(){
   }));
 }
 
+// the Project Quote section broken into its pieces, so it can be rendered whole or split across pages
+function quoteParts(){
+  const q=quoteCalc(), sd=showQuoteDays, span=sd?4:2;
+  return {
+    head: `<div class="bar mt">PROJECT QUOTE</div>`
+      + (val('i-quoteintro').trim()?`<p>${esc(val('i-quoteintro'))}</p>`:''),
+    thead: `<thead><tr><th>Category</th><th>Description</th>${sd?'<th class="c">Day rate</th><th class="c">Days</th>':''}<th class="c">Total</th></tr></thead>`,
+    rows: quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td>${sd?`<td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td>`:''}<td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`),
+    // subtotal / discount / total always travel together as one indivisible group
+    summary: (q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:left;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
+        <tr><td colspan="${span}" style="text-align:left;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:'')
+      + `<tr class="total"><td colspan="${span}" style="text-align:left;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>`,
+    vat: `<p class="note">${VAT_NOTE}</p>`,
+    notes: notesListFor(quoteNotes)
+  };
+}
+// the Quote Options section broken into its pieces, so it can be rendered whole or split across pages
+function optionsParts(){
+  const cols=optCols();
+  const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
+  const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
+  const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
+  return {
+    head: `<div class="bar mt">QUOTE OPTIONS</div>`
+      + (val('i-optintro').trim()?`<p>${esc(val('i-optintro'))}</p>`:''),
+    thead: `<thead><tr><th class="rh">&nbsp;</th>${cols.map(c=>`<th class="c">${esc(c)}</th>`).join('')}</tr></thead>`,
+    rows: optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`),
+    // subtotal / discount / total always travel together as one indivisible group
+    summary: (hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
+        <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:'')
+      + `<tr class="total"><td>Total investment</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`,
+    vat: `<p class="note">${VAT_NOTE}</p>`,
+    notes: notesListFor(optNotes)
+  };
+}
+const priceTable=(p,rows)=>`<table class="price">${p.thead}<tbody>${rows.join('')}</tbody></table>`;
+// a pricing section rendered whole, for measuring and for anywhere it isn't being paginated
+const priceSectionHTML=p => p.head + priceTable(p, p.rows.concat(p.summary)) + p.vat
+  + (p.notes.length?`<div style="margin-top:22pt;">${p.notes.join('')}</div>`:'');
+
+// A pricing section is emitted as page-sized pieces. The page box is clipped, so a table long
+// enough to fill the page used to push the VAT line and the cost explanations off the bottom
+// and they were simply lost. Chunk the rows so each table fits a page (continuation chunks
+// repeat the column header), and make the VAT note and each explanation their own block so
+// they flow onto the next page. A section that already fits yields one block and packs as before.
+function priceBlocks(id, p, pageH){
+  const m = measurePriceParts(p);
+  const items = p.rows.map((html,i)=>({html, h:m.rows[i]}));
+  items.push({html:p.summary, h:m.summary});
+  const chunks=[]; let cur=[], curH=0;
+  // the first chunk shares its page with the section bar and intro line; every chunk carries a header
+  const budget = () => pageH - m.thead - m.chrome - (chunks.length===0 ? m.head : 0);
+  items.forEach(it=>{
+    if(cur.length && curH + it.h > budget()){ chunks.push(cur); cur=[]; curH=0; }
+    cur.push(it.html); curH += it.h;
+  });
+  if(cur.length) chunks.push(cur);
+  return chunks.map((rows,i)=>({
+    id: i===0 ? id : id+'-t'+i,
+    html: (i===0 ? p.head : '') + priceTable(p, rows)
+  })).concat(
+    {id:id+'-vat', html:p.vat},
+    p.notes.map((h,i)=>({id:id+'-note'+i, html: i===0?`<div style="margin-top:22pt;">${h}</div>`:h}))
+  );
+}
+// measure the section's pieces at the real content width so the rows can be chunked to fit a page
+function measurePriceParts(p){
+  const holder=document.createElement('div');
+  holder.style.cssText='position:absolute;left:-99999px;top:0;visibility:hidden;';
+  holder.innerHTML=`<div class="pg" style="display:flow-root;width:180mm;min-height:0;height:auto;padding:0;box-shadow:none;">
+    <div data-head>${p.head}</div>${priceTable(p, p.rows.concat(p.summary))}</div>`;
+  document.body.appendChild(holder);
+  const trs=[...holder.querySelectorAll('tbody tr')];
+  const tbl=holder.querySelector('table'), cs=getComputedStyle(tbl);
+  const theadH=holder.querySelector('thead').offsetHeight;
+  const rows=trs.slice(0, p.rows.length).map(tr=>tr.offsetHeight);
+  const summary=trs.slice(p.rows.length).reduce((a,tr)=>a+tr.offsetHeight, 0);
+  const out={
+    head: holder.querySelector('[data-head]').offsetHeight,
+    thead: theadH, rows, summary,
+    // the table's own margins and borders, which sit outside the measured rows
+    chrome: Math.max(0, tbl.offsetHeight - theadH - rows.reduce((a,h)=>a+h,0) - summary)
+      + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)
+  };
+  document.body.removeChild(holder);
+  return out;
+}
+
 // ---- main render: paginate sections across pages ----
 let pageOf = {};
 let tocTwoCol = false;
@@ -841,12 +902,14 @@ function render(){
         placed=true;
         bl.push({id:'intro-group', members:[...groupIds], html:groupIds.map(x=>secHTML(x)).join('')});
       } else if(id==='terms'){ termsBlocks().forEach(b=>bl.push(b)); }
+      else if(id==='options'){ priceBlocks('options', optionsParts(), pageH).forEach(b=>bl.push(b)); }
+      else if(id==='quote'){ priceBlocks('quote', quoteParts(), pageH).forEach(b=>bl.push(b)); }
       else bl.push({id, html:secHTML(id)});
     });
     customs.forEach((c,idx)=>bl.push({id:'custom'+idx, html:`<div class="bar mt">${esc(c.title)}</div><p>${esc(c.body)}</p>`}));
     return bl;
   };
-  const pageH = availablePageHeight();
+  let pageH = availablePageHeight();
   let merge = groupIds.length>1;
   tocTwoCol = false;
   let blocks = build(merge);
@@ -886,8 +949,10 @@ function render(){
   // section would be silently cut off instead. Check the real laid-out pages and, if anything
   // overflowed, tighten the budget and re-pack so the section moves down a page instead.
   for(let i=0; i<3; i++){
-    const over = Math.max(0, ...[...document.querySelectorAll('.pg:not(.cover) .pv-body')]
-      .map(b => b.scrollHeight - b.clientHeight));
+    // measure the page box itself: .pv-body is overflow:visible, so it always reports
+    // scrollHeight === clientHeight and never showed the overflow it was meant to catch
+    const over = Math.max(0, ...[...document.querySelectorAll('.pg:not(.cover)')]
+      .map(pg => pg.scrollHeight - pg.clientHeight));
     if(over <= 0) break;
     pageH -= over + 2;
     pages = layout(pageH);
