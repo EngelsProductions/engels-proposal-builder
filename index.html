@@ -1029,7 +1029,7 @@ function quoteParts(){
     // subtotal / discount / total always travel together as one indivisible group
     summary: (q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:left;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
         <tr><td colspan="${span}" style="text-align:left;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:'')
-      + `<tr class="total"><td colspan="${span}" style="text-align:left;">Total investment</td><td class="c">${gbp(q.grand)}</td></tr>`,
+      + `<tr class="total"><td colspan="${span}" style="text-align:left;">Total Investment</td><td class="c">${gbp(q.grand)}</td></tr>`,
     vat: `<p class="note">${VAT_NOTE}</p>`,
     notes: notesListFor(quoteNotes)
   };
@@ -1049,7 +1049,7 @@ function optionsParts(){
     // subtotal / discount / total always travel together as one indivisible group
     summary: (hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
         <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:'')
-      + `<tr class="total"><td>Total investment</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`,
+      + `<tr class="total"><td>Total Investment</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`,
     vat: `<p class="note">${VAT_NOTE}</p>`,
     notes: notesListFor(optNotes)
   };
