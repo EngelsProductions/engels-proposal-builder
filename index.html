@@ -1003,9 +1003,7 @@ const INTRO_GROUP = ['toc','about','keyaspects'];   // these must share a page
 function render(){
   renderCalc(); renderQuoteCalc();
   const activeIds = order.filter(id=>SECTIONS.find(s=>s.id===id).on);
-  // About drops out of the must-share-a-page group once it carries photos: a few of them make
-  // it taller than a page on its own, and it has to be free to flow to be able to break
-  const groupIds = activeIds.filter(id=>INTRO_GROUP.includes(id) && !(id==='about' && aboutPhotos.length));
+  const groupIds = activeIds.filter(id=>INTRO_GROUP.includes(id));
   // when merged, contents/about/key-aspects become one block so they can't be split across pages
   const build=(merge)=>{
     const bl=[]; let placed=false;
@@ -1024,7 +1022,11 @@ function render(){
     return bl;
   };
   let pageH = availablePageHeight();
-  let merge = groupIds.length>1;
+  // Photos push About past a single page, so the intro group can't be one atomic block any
+  // more. Don't merge at all in that case rather than merging the rest around it: merging
+  // Contents with Key Aspects emitted them together at Contents' position, which put Key
+  // Aspects ahead of About. Unmerged, every section keeps its running order.
+  let merge = groupIds.length>1 && !aboutPhotos.length;
   tocTwoCol = false;
   let blocks = build(merge);
   measureBlocks(blocks);
