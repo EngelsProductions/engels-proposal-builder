@@ -17,7 +17,17 @@ The whole point of this tool is that the design is LOCKED so proposals never loo
 
 ## File structure
 
-- `index.html` — the entire app: HTML, CSS, and JS in one file. There is no build step.
+- `index.html` — the entire app: HTML, CSS, and JS in one file. There is no build step
+  for the app itself.
+- `api/assist.js` — the only server-side code: a Vercel function backing the in-app AI
+  assistant. It exists because the repo is public and the Anthropic API key must never
+  reach the browser; the key is the `ANTHROPIC_API_KEY` environment variable set on the
+  Vercel project, never in this repo. `package.json` exists solely for its dependency.
+  **The assistant is not allowed to produce markup.** It answers with tool calls naming
+  existing fields and list entries, and `AI_APPLY` in `index.html` applies them through
+  the same variables the control panel edits. That is what keeps the locked design safe
+  from it — so never add a tool that emits HTML, CSS, or styling of any kind. Bulleted
+  points go through `add_key_aspect` (the callout box), not a new list component.
   - Embedded assets: the logo and cover photo are base64 data URIs near the top of the
     `<script>` (`LOGO`, `COVER_DEFAULT`). Do not remove or re-encode these.
   - `SECTIONS` array = the toggleable sections. `secHTML(id)` renders each one.

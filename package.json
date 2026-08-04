@@ -1,0 +1,10 @@
+{
+  "name": "engels-proposal-builder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Serverless function for the AI assistant. The app itself is index.html and has no build step.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.0"
+  }
+}
