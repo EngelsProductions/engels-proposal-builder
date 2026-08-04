@@ -258,9 +258,18 @@ export default async function handler(req, res) {
     return res.status(200).json({ message: message.trim(), actions });
   } catch (err) {
     const status = err?.status;
+    // the SDK's err.message is the raw JSON envelope — dig out the sentence meant for a human
+    const detail = err?.error?.error?.message || err?.message || "";
+    console.error("assist failed:", status, detail);
+
     if (status === 401) return res.status(500).json({ error: "The API key on this deployment was rejected." });
     if (status === 429) return res.status(429).json({ error: "Rate limited by the API. Try again shortly." });
-    console.error("assist failed:", err);
-    return res.status(502).json({ error: err?.message || "The assistant could not be reached." });
+    if (/credit balance/i.test(detail)) {
+      return res.status(402).json({
+        error: "The Anthropic account has no credit. Add credit under Plans & Billing at console.anthropic.com, then try again.",
+      });
+    }
+    if (status === 400) return res.status(400).json({ error: "The API rejected the request: " + detail });
+    return res.status(502).json({ error: detail || "The assistant could not be reached." });
   }
 }
