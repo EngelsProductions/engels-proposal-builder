@@ -101,6 +101,26 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .callout{background:var(--box);color:#fff;border-radius:8px;padding:13pt 16pt 5pt;margin:6pt 0 12pt;}
 .callout p{color:#fff;font-size:10pt;line-height:1.6;margin:0 0 9pt;}
 .callout .k{font-weight:700;text-decoration:underline;text-decoration-color:rgba(255,255,255,.5);text-underline-offset:2px;}
+/* about photos — a white rounded frame with a mirrored reflection under it, matching the
+   picture style used in the printed proposals. The photos float so the copy wraps around
+   them and they sit at varied points down the page rather than in a fixed strip.
+   The reflection is a flipped copy behind a white gradient, not -webkit-box-reflect or a
+   CSS mask: Safari drops both when printing, and since the page is always white a gradient
+   to #fff reads identically on screen and survives the PDF. */
+.abt{display:flow-root;}   /* contain the floats so they can't bleed into the next section */
+/* clear:both, not clear:left/right — a left and a right photo on the same line would leave
+   the copy running down a sliver of a gutter between them */
+.ph{margin:1pt 0 7pt;clear:both;}
+.ph.l{float:left;margin-right:13pt;}
+.ph.r{float:right;margin-left:13pt;}
+.ph .fr{position:relative;border:3px solid #fff;border-radius:8px;
+  box-shadow:0 2px 9px rgba(20,30,60,.26);overflow:hidden;background:#eef4f9;}
+.ph .fr img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
+/* the reflection is the frame mirrored, so its rounded corners belong at the top */
+.ph .rf{position:relative;padding-bottom:15%;overflow:hidden;margin-top:3px;border-radius:7px 7px 0 0;}
+.ph .rf .in{position:absolute;top:0;left:0;right:0;transform:scaleY(-1);}
+.ph .rf .in img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
+.ph .rf::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(255,255,255,.5),#fff 78%);}
 table.price{width:100%;border-collapse:collapse;margin:4pt 0 4pt;font-size:10pt;}
 table.price th,table.price td{padding:7pt 10pt;border-bottom:1px solid var(--line);text-align:left;}
 table.price thead th{background:var(--navy);color:#fff;font-weight:600;border:none;}
@@ -198,6 +218,10 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <h4>Intro copy (editable)</h4>
       <label class="f">Opening line<textarea id="i-lead">OB Private is building a distinctive lifestyle brand across property, travel and the Circle membership community.</textarea></label>
       <label class="f">Body<textarea id="i-about">The brief is short-form cinematic content each month that reflects the OB Private image: considered, premium, and quietly confident. This arrangement gives a consistent production presence without being locked into a rigid format — the content mix can shift each month depending on what the business needs.</textarea></label>
+      <label class="f" style="margin:14px 0 5px;">Photos (optional)</label>
+      <div id="about-photos"></div>
+      <label class="f"><input type="file" id="i-aboutphoto" accept="image/*" multiple></label>
+      <p class="hint">Photos sit in the About section with the copy wrapping around them. Drag to reorder; each one can go left or right at three sizes.</p>
       <p class="hint"><b>Bold:</b> select text and press ⌘B (Ctrl+B), or wrap it in <b>**double asterisks**</b>. Works in every text box in this panel.</p>
     </div>
 
@@ -379,6 +403,7 @@ let retTiers = DEFAULT_RETTIERS.map(t=>({...t}));   // monthly retainer columns
 let retAdhocOn = true;                              // show the Ad Hoc comparison column
 let optTiers = DEFAULT_OPTTIERS.slice();
 let optRows = DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
+let aboutPhotos = []; // optional About photos {src, side:'l'|'r', size:'s'|'m'|'l'}
 let optNotes = [];   // cost explanations {label, text} — quote options
 let quoteNotes = []; // cost explanations {label, text} — project quote
 let showQuoteDays = true;  // show the day-rate/days columns on the project quote
@@ -446,6 +471,68 @@ function renderCustoms(){
     w.appendChild(d);
   });
 }
+
+// ---- about photos (optional, float alongside the About copy) ----
+const PH_W = {s:32, m:42, l:52};   // float width as a % of the content column
+document.getElementById('i-aboutphoto').onchange=e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  e.target.value='';
+  // each file decodes at its own pace, so collect into slots and append in the order they were
+  // picked — otherwise a small photo overtakes a large one and the selection comes out shuffled
+  const slots=new Array(files.length).fill(null);
+  const base=aboutPhotos.length;
+  let pending=files.length;
+  const done=()=>{ if(--pending) return;
+    slots.forEach((s,i)=>{ if(s) aboutPhotos.push({src:s.src, side:(base+i)%2?'r':'l', size:'m', ar:s.ar}); });
+    renderAboutPhotos(); render();
+  };
+  files.forEach((f,i)=>{
+    const r=new FileReader();
+    // photos live inside the draft in localStorage, so downscale hard — they print at ~85mm wide
+    r.onload=()=>downscale(r.result,1400,0.82,out=>{
+      // remember the shape so the frame and its reflection keep the photo's own proportions
+      const probe=new Image();
+      const add=ar=>{ slots[i]={src:out, ar}; done(); };
+      probe.onload=()=>add(probe.naturalWidth?probe.naturalHeight/probe.naturalWidth:0.666);
+      probe.onerror=()=>add(0.666);
+      probe.src=out;
+    });
+    r.onerror=done;
+    r.readAsDataURL(f);
+  });
+};
+function renderAboutPhotos(){
+  const w=document.getElementById('about-photos'); if(!w) return; w.innerHTML='';
+  aboutPhotos.forEach((p,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+      <img src="${p.src}" style="width:100%;height:64px;object-fit:cover;border-radius:5px;display:block;margin-bottom:7px;">
+      <div class="row">
+        <label class="f">Side<select class="ph-side">
+          <option value="l"${p.side==='l'?' selected':''}>Left</option>
+          <option value="r"${p.side==='r'?' selected':''}>Right</option>
+        </select></label>
+        <label class="f">Size<select class="ph-size">
+          <option value="s"${p.size==='s'?' selected':''}>Small</option>
+          <option value="m"${p.size==='m'?' selected':''}>Medium</option>
+          <option value="l"${p.size==='l'?' selected':''}>Large</option>
+        </select></label>
+      </div>`;
+    d.querySelector('.x').onclick=()=>{aboutPhotos.splice(i,1);renderAboutPhotos();render();};
+    d.querySelector('.ph-side').onchange=e=>{p.side=e.target.value;render();};
+    d.querySelector('.ph-size').onchange=e=>{p.size=e.target.value;render();};
+    w.appendChild(d);
+  });
+  makeDraggable(w, aboutPhotos, renderAboutPhotos);
+}
+// one floated, framed photo with its reflection. Each keeps its own shape — portrait and
+// landscape shots sit side by side down the page as they do in the printed proposals —
+// so the frame and the reflection are both driven by the photo's stored aspect ratio.
+const photoHTML = p => { const ar=(+p.ar>0?+p.ar:0.666)*100;
+  return `<div class="ph ${p.side==='r'?'r':'l'}" style="width:${PH_W[p.size]||PH_W.m}%;">
+  <div class="fr" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div>
+  <div class="rf"><div class="in" style="padding-bottom:${ar.toFixed(2)}%;"><img src="${p.src}"></div></div>
+</div>`; };
 
 // ---- key aspects (editable list) ----
 document.getElementById('add-ka').onclick=()=>{
@@ -729,9 +816,11 @@ function secHTML(id){
       return `<div class="bar">CONTENTS</div>
       <div class="toc${tocTwoCol?' two-col':''}"${rows}>${entries.map(e=>`<div class="toc-row"><span class="toc-lbl">${esc(e.label)}</span><span class="toc-pg">${e.page||''}</span></div>`).join('')}</div>`;
    }
-   case 'about': return `<div class="bar mt">ABOUT THIS PARTNERSHIP</div>
-      <p><span class="lead">${esc(val('i-lead'))}</span></p>
-      <p>${esc(val('i-about'))}</p>`;
+   // no photos means no floats to contain, and the .abt wrapper would stop the last
+   // paragraph's margin collapsing into the next section bar — so leave the markup as it was
+   case 'about': return ABOUT_BAR + (aboutPhotos.length
+      ? aboutChunks().map(c=>`<div class="abt">${c}</div>`).join('')
+      : aboutChunks().join(''));
    case 'keyaspects': return `<p class="klead">Key aspects of this project:</p>
       ${val('i-keyintro').trim()?`<p>${esc(val('i-keyintro'))}</p>`:''}
       <div class="callout">
@@ -794,6 +883,28 @@ function termsBlocks(){
   return all.map((t,i)=>({
     id: i===0 ? 'terms' : 'terms-'+i,
     html: (i===0 ? bar : '') + `<div class="terms"><h4>${esc(t.h)}</h4><p>${esc(t.b)}</p></div>`
+  }));
+}
+
+// About This Partnership, as one chunk per photo: each photo is floated in front of the
+// paragraphs that belong beside it, so the copy wraps around it. Chunking matters because a
+// few photos make the section taller than a page, and the page box is clipped — as separate
+// blocks the section flows onto the next page instead of losing whatever fell off the bottom.
+const ABOUT_BAR = `<div class="bar mt">ABOUT THIS PARTNERSHIP</div>`;
+function aboutChunks(){
+  const paras = val('i-about').split(/\n\n+/).filter(t=>t.trim()).map(t=>`<p>${esc(t)}</p>`);
+  paras.unshift(`<p><span class="lead">${esc(val('i-lead'))}</span></p>`);
+  if(!aboutPhotos.length) return [paras.join('')];
+  const per = Math.max(1, Math.ceil(paras.length/aboutPhotos.length));
+  const out = aboutPhotos.map((p,i)=> photoHTML(p) + paras.slice(i*per,(i+1)*per).join(''));
+  const spare = paras.slice(aboutPhotos.length*per).join('');
+  if(spare) out.push(spare);
+  return out;
+}
+function aboutBlocks(){
+  return aboutChunks().map((c,i)=>({
+    id: i===0 ? 'about' : 'about-'+i,
+    html: (i===0 ? ABOUT_BAR : '') + `<div class="abt">${c}</div>`
   }));
 }
 
@@ -892,7 +1003,9 @@ const INTRO_GROUP = ['toc','about','keyaspects'];   // these must share a page
 function render(){
   renderCalc(); renderQuoteCalc();
   const activeIds = order.filter(id=>SECTIONS.find(s=>s.id===id).on);
-  const groupIds = activeIds.filter(id=>INTRO_GROUP.includes(id));
+  // About drops out of the must-share-a-page group once it carries photos: a few of them make
+  // it taller than a page on its own, and it has to be free to flow to be able to break
+  const groupIds = activeIds.filter(id=>INTRO_GROUP.includes(id) && !(id==='about' && aboutPhotos.length));
   // when merged, contents/about/key-aspects become one block so they can't be split across pages
   const build=(merge)=>{
     const bl=[]; let placed=false;
@@ -901,7 +1014,8 @@ function render(){
         if(placed) return;
         placed=true;
         bl.push({id:'intro-group', members:[...groupIds], html:groupIds.map(x=>secHTML(x)).join('')});
-      } else if(id==='terms'){ termsBlocks().forEach(b=>bl.push(b)); }
+      } else if(id==='about' && aboutPhotos.length){ aboutBlocks().forEach(b=>bl.push(b)); }
+      else if(id==='terms'){ termsBlocks().forEach(b=>bl.push(b)); }
       else if(id==='options'){ priceBlocks('options', optionsParts(), pageH).forEach(b=>bl.push(b)); }
       else if(id==='quote'){ priceBlocks('quote', quoteParts(), pageH).forEach(b=>bl.push(b)); }
       else bl.push({id, html:secHTML(id)});
@@ -1019,7 +1133,7 @@ function snapshot(){
   const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
   const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
   return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
-          keyAspects:clone(keyAspects), quoteItems:clone(quoteItems),
+          keyAspects:clone(keyAspects), aboutPhotos:clone(aboutPhotos), quoteItems:clone(quoteItems),
           retTiers:clone(retTiers), retAdhocOn,
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
           quoteNotes:clone(quoteNotes), showQuoteDays,
@@ -1042,6 +1156,7 @@ function applyState(st){
   });
   customs = Array.isArray(st.customs) ? clone(st.customs) : [];
   keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
+  aboutPhotos = Array.isArray(st.aboutPhotos) ? clone(st.aboutPhotos) : [];
   quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
   // retainer tiers: new drafts carry retTiers; older ones are migrated from the fixed A/B inputs
   if(Array.isArray(st.retTiers)) retTiers = clone(st.retTiers);
@@ -1069,7 +1184,7 @@ function applyState(st){
   coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
   document.getElementById('i-cover').value='';
   syncAdhocField();
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
   refreshCover();
 }
 function loadStore(){
@@ -1238,7 +1353,7 @@ if(drafts.length){
   currentId=cur.id; applyState(cur.state);
 }else{
   syncAdhocField();
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
   document.getElementById('i-date').value=todayStr(); render(); refreshCover();
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
