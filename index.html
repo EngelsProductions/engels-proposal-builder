@@ -21,6 +21,11 @@ html,body{margin:0;height:100%;font-family:"Poppins",system-ui,sans-serif;backgr
 .panel{background:var(--panel);color:#e8ecff;overflow-y:auto;padding:0 0 40px;}
 .panel-head{position:sticky;top:0;z-index:5;background:var(--navy);padding:16px 20px;border-bottom:1px solid var(--panel-line);display:flex;align-items:center;gap:10px;}
 .panel-head img{height:26px;}
+.panel-head .hist{margin-left:auto;display:flex;gap:5px;}
+.panel-head .hist button{width:30px;height:30px;padding:0;border-radius:7px;border:1px solid var(--panel-line);
+  background:transparent;color:#aab6e6;font-size:15px;line-height:1;cursor:pointer;font-family:inherit;}
+.panel-head .hist button:hover:not(:disabled){background:rgba(255,255,255,.07);color:#fff;}
+.panel-head .hist button:disabled{opacity:.3;cursor:default;}
 .panel-head .ttl{font-weight:600;font-size:13px;letter-spacing:.03em;}
 .panel-head .ttl span{display:block;font-weight:300;font-size:10px;color:#8fa4d6;letter-spacing:.14em;}
 .grp{padding:16px 20px;border-bottom:1px solid var(--panel-line);}
@@ -218,6 +223,10 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     <div class="panel-head">
       <img id="ph-logo" alt="Engels"/>
       <div class="ttl">Proposal Builder<span>ENGELS PRODUCTIONS</span></div>
+      <div class="hist">
+        <button id="h-undo" title="Undo the last change">↶</button>
+        <button id="h-redo" title="Redo">↷</button>
+      </div>
     </div>
 
     <div class="grp">
@@ -1349,8 +1358,48 @@ function commitCurrent(){
   const d=drafts.find(x=>x.id===currentId); if(!d) return;
   d.state=snapshot(); d.updated=Date.now();
   if(d.auto && val('i-client').trim()) d.name=val('i-client').trim();
-  persist(); renderDrafts();
+  persist(); renderDrafts(); historyCapture(d.state);
 }
+
+// ---- undo / redo for every edit, not just the assistant's ----
+// Captured on the same 400ms settle as the autosave, so a burst of typing becomes one step
+// rather than one per keystroke. Snapshots carry the embedded photos, hence the depth cap.
+const HISTORY_MAX = 25;
+let histPast=[], histFuture=[], histLast=null;
+function historyCapture(state){
+  const s = state || snapshot();
+  // after an undo, histLast already equals the applied state, so nothing is recorded
+  if(histLast && JSON.stringify(s)===JSON.stringify(histLast)) return;
+  if(histLast){ histPast.push(histLast); if(histPast.length>HISTORY_MAX) histPast.shift(); histFuture.length=0; }
+  histLast=s; syncHistoryButtons();
+}
+function historyGo(back){
+  const from = back?histPast:histFuture, to = back?histFuture:histPast;
+  if(!from.length) return;
+  to.push(histLast || snapshot());
+  const target = from.pop();
+  histLast = target;                 // set before applying so the settle capture is a no-op
+  applyState(clone(target));
+  syncHistoryButtons();
+  setStatus(back ? 'Undone · '+timeStr(Date.now()) : 'Redone · '+timeStr(Date.now()));
+}
+function historyReset(){ histPast=[]; histFuture=[]; histLast=snapshot(); syncHistoryButtons(); }
+function syncHistoryButtons(){
+  const u=document.getElementById('h-undo'), r=document.getElementById('h-redo');
+  if(!u) return;
+  u.disabled=!histPast.length; r.disabled=!histFuture.length;
+  u.title = histPast.length ? 'Undo the last change ('+histPast.length+' available)' : 'Nothing to undo';
+  r.title = histFuture.length ? 'Redo ('+histFuture.length+' available)' : 'Nothing to redo';
+}
+document.getElementById('h-undo').onclick=()=>historyGo(true);
+document.getElementById('h-redo').onclick=()=>historyGo(false);
+// keyboard shortcut, but never while typing — the field's own undo must keep working there
+document.addEventListener('keydown',e=>{
+  if(!(e.metaKey||e.ctrlKey) || e.key.toLowerCase()!=='z') return;
+  const t=e.target.tagName;
+  if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||e.target.isContentEditable) return;
+  e.preventDefault(); historyGo(!e.shiftKey);
+});
 function newDraft(state,name,manual){
   const d={id:uid(), name:name||'Untitled proposal', auto:!manual, updated:Date.now(), state:state||snapshot()};
   drafts.unshift(d); currentId=d.id; persist(); renderDrafts(); return d;
@@ -1359,19 +1408,20 @@ function switchDraft(id){
   if(id===currentId) return;
   commitCurrent();
   const d=drafts.find(x=>x.id===id); if(!d) return;
-  currentId=id; applyState(d.state); persist(); renderDrafts();
+  currentId=id; applyState(d.state); persist(); renderDrafts(); historyReset();
 }
 function duplicateDraft(){
   commitCurrent();
   const cur=drafts.find(x=>x.id===currentId);
   newDraft(snapshot(), ((cur&&cur.name)||'Proposal')+' copy', true);
+  historyReset();   // the copy is its own document; the original's history doesn't apply to it
 }
 function deleteDraft(id){
   const d=drafts.find(x=>x.id===id); if(!d) return;
   if(!confirm('Delete “'+d.name+'”? This cannot be undone.')) return;
   drafts=drafts.filter(x=>x.id!==id);
   if(currentId===id){
-    if(drafts.length){ currentId=drafts[0].id; applyState(drafts[0].state); }
+    if(drafts.length){ currentId=drafts[0].id; applyState(drafts[0].state); historyReset(); }
     else { applyState(clone(DEFAULT_STATE)); newDraft(clone(DEFAULT_STATE),'Untitled proposal'); return; }
   }
   persist(); renderDrafts();
@@ -1407,7 +1457,7 @@ function importDraft(file){
   r.onload=()=>{ try{ const obj=JSON.parse(r.result); const st=obj.state||obj;
       if(!st || typeof st!=='object' || !st.inputs) throw 0;
       const d=newDraft(clone(st), obj.name||val('i-client')||'Imported proposal', true);
-      applyState(d.state);
+      applyState(d.state); historyReset();
     }catch(e){ alert('That file could not be read as an Engels proposal draft.'); } };
   r.readAsText(file);
 }
@@ -1421,7 +1471,7 @@ function downscale(dataUrl,maxW,q,cb){
   img.onerror=()=>cb(dataUrl); img.src=dataUrl;
 }
 
-document.getElementById('draft-new').onclick=()=>{ applyState(clone(DEFAULT_STATE)); document.getElementById('i-date').value=todayStr(); render(); newDraft(snapshot(),'Untitled proposal'); };
+document.getElementById('draft-new').onclick=()=>{ applyState(clone(DEFAULT_STATE)); document.getElementById('i-date').value=todayStr(); render(); newDraft(snapshot(),'Untitled proposal'); historyReset(); };
 document.getElementById('draft-dup').onclick=duplicateDraft;
 document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
@@ -1464,6 +1514,8 @@ if(drafts.length){
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
+// baseline for undo, so the very first edit can be stepped back to the loaded proposal
+histLast = snapshot(); syncHistoryButtons();
 if(!storageOK) setStatus(NOSAVE_MSG);
 
 // ---- collapsible control-panel sections (accordion) ----
