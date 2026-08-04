@@ -1431,6 +1431,23 @@ const AI_FIELDS = {
   day_rate_dop:'r-dop', day_rate_editor:'r-ed'
 };
 const aiNotes = s => s==='quote' ? quoteNotes : optNotes;
+// match column names case-insensitively and parse each cell the way typed input is parsed
+function aiCells(values){
+  const cols=optCols(), out={};
+  Object.entries(values||{}).forEach(([k,v])=>{
+    const col=cols.find(c=>c.toLowerCase()===String(k).trim().toLowerCase());
+    if(!col) return;
+    const parsed=parseCell(String(v));
+    if(parsed!==undefined) out[col]=parsed;
+  });
+  return out;
+}
+// which section each change writes into, so a change landing in a hidden one can be flagged
+const AI_TARGET = {
+  add_quote_item:'quote', update_quote_item:'quote', remove_quote_item:'quote',
+  add_option_row:'options', update_option_row:'options', remove_option_row:'options',
+  add_key_aspect:'keyaspects', add_term:'terms'
+};
 
 // what the assistant is shown: the proposal's words and numbers, never the embedded photos
 function aiState(){
@@ -1490,6 +1507,22 @@ const AI_APPLY = {
     if(!quoteItems[index]) throw Error('No quote row at position '+index);
     quoteItems.splice(index,1); renderQuote(); return 'Removed a quote line item';
   },
+  // values go through parseCell exactly as typed input does, so a number becomes a price,
+  // a tick-word becomes ✓, and anything else stays as written
+  add_option_row({category,values}){
+    optRows.push({cat:category, vals:aiCells(values)}); renderOptions();
+    return 'Added a Quote Options row';
+  },
+  update_option_row({index,category,values}){
+    const r=optRows[index]; if(!r) throw Error('No Quote Options row at position '+index);
+    if(category!==undefined) r.cat=category;
+    Object.assign(r.vals, aiCells(values));
+    renderOptions(); return 'Updated a Quote Options row';
+  },
+  remove_option_row({index}){
+    if(!optRows[index]) throw Error('No Quote Options row at position '+index);
+    optRows.splice(index,1); renderOptions(); return 'Removed a Quote Options row';
+  },
   add_term({heading,body}){
     terms.push({h:heading,b:body}); renderTerms(); return 'Added a term';
   },
@@ -1544,9 +1577,20 @@ const AI_APPLY = {
         before=snapshotBefore; undo.classList.add('show');
         render(); input.value='';
       }
+      // a change can land in a switched-off section and be invisible — say so rather than
+      // reporting success against something the user cannot see
+      const hiddenHit=[...new Set((data.actions||[]).map(a=>AI_TARGET[a.tool]).filter(Boolean))]
+        .filter(id=>!SECTIONS.find(s=>s.id===id)?.on)
+        .map(id=>SECTIONS.find(s=>s.id===id)?.name||id);
+      const warn=hiddenHit.length
+        ? ' Note: '+hiddenHit.join(' and ')+(hiddenHit.length>1?' are':' is')+
+          ' switched off, so the change is not visible — tick it under “Sections”.'
+        : '';
+
       const summary=(data.message||'').trim();
       if(!done.length && !failed.length) say(summary||'Nothing was changed.');
-      else say([summary, failed.join(' ')].filter(Boolean).join(' ') || (done.length+' change(s) applied.'),
+      else say([summary || (done.length+' change'+(done.length>1?'s':'')+' applied.'),
+                failed.join(' '), warn].filter(Boolean).join(' '),
                failed.length?'err':'ok');
     }catch(e){
       say(e.message||'Could not reach the assistant.','err');

@@ -154,6 +154,54 @@ const TOOLS = [
     },
   },
   {
+    name: "add_option_row",
+    description:
+      "Add a row to the Quote Options comparison table — the one with a column per tier. " +
+      "Give a price for each column you want filled. This is a different table from the Project Quote; " +
+      "check which one the proposal is actually using before choosing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Row label down the left-hand side." },
+        values: {
+          type: "object",
+          description:
+            "Value per column, keyed by the exact column name shown in quote_options_columns. " +
+            "A number is shown as a price; the word 'yes' becomes a tick; short text such as " +
+            "'2 rounds' or 'Unlimited' is shown as written. Omit a column to leave it blank.",
+          additionalProperties: { type: "string" },
+        },
+      },
+      required: ["category", "values"],
+    },
+  },
+  {
+    name: "update_option_row",
+    description: "Change an existing Quote Options row by its position (0 is the first).",
+    input_schema: {
+      type: "object",
+      properties: {
+        index: { type: "integer", description: "Zero-based row position." },
+        category: { type: "string", description: "New row label. Omit to leave unchanged." },
+        values: {
+          type: "object",
+          description: "Columns to change, keyed by column name. Columns you omit keep their current value.",
+          additionalProperties: { type: "string" },
+        },
+      },
+      required: ["index"],
+    },
+  },
+  {
+    name: "remove_option_row",
+    description: "Delete a Quote Options row by its position.",
+    input_schema: {
+      type: "object",
+      properties: { index: { type: "integer" } },
+      required: ["index"],
+    },
+  },
+  {
     name: "add_term",
     description: "Add a term to Key Terms & Conditions: a short heading and a paragraph.",
     input_schema: {
@@ -198,6 +246,13 @@ Writing style, which you must match exactly:
 - Never use marketing cliches like "elevate", "unlock", "seamless", "cutting-edge", "bespoke solutions".
 - Prices are pounds. Engels Productions is NOT VAT registered — never write anything implying VAT.
 - Match the length and rhythm of the copy already in the proposal.
+
+There are two separate pricing tables and only one is usually switched on. Project Quote is a
+one-off breakdown with day rates and days (add_quote_item). Quote Options is a comparison with a
+column per tier (add_option_row). Before touching either, check sections_included: if the user
+asks for "the quote table", they mean whichever one is currently included. Adding to a section
+listed in sections_hidden puts the content somewhere they cannot see — if that is genuinely what
+they want, call toggle_section to switch it on in the same turn, and say you have done so.
 
 How to work:
 - You are given the proposal's current contents. Read it before acting so your additions fit what is there.
