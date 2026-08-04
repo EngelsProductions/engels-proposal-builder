@@ -41,6 +41,12 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .toggle{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;margin-bottom:8px;cursor:pointer;user-select:none;font-size:12.5px;}
 .toggle input{width:16px;height:16px;accent-color:var(--blue);cursor:pointer;}
 .toggle .drag{margin-left:auto;color:#556; font-size:14px; cursor:grab;}
+/* "start on a new page" sits to the right of the section name, before the drag handle */
+.toggle .brk{margin-left:auto;display:flex;align-items:center;gap:5px;color:#6a76a8;font-size:11px;
+  letter-spacing:.02em;white-space:nowrap;}
+.toggle .brk input{width:13px;height:13px;}
+.toggle .brk.on{color:var(--blue);}
+.toggle .drag{margin-left:8px;}
 .toggle.dragging{opacity:.5;}
 .toggle.over{border-color:var(--blue);}
 .hint{font-size:10.5px;color:#7d8fce;line-height:1.5;margin:2px 0 0;}
@@ -257,7 +263,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     <div class="grp">
       <h4>Sections — tick to include</h4>
       <div id="sec-toggles"></div>
-      <p class="hint">Drag to reorder. For a one-off, untick Monthly Retainer Options and tick Project Quote. Add a bespoke section for anything new.</p>
+      <p class="hint">Drag to reorder. Tick “New page” to start a section on a fresh page. For a one-off, untick Monthly Retainer Options and tick Project Quote. Add a bespoke section for anything new.</p>
       <button class="btn ghost" id="add-custom">+ Add bespoke section</button>
       <div id="custom-list" style="margin-top:10px;"></div>
     </div>
@@ -510,8 +516,14 @@ function renderToggles(){
     const s = SECTIONS.find(x=>x.id===id);
     const el = document.createElement('label');
     el.className='toggle'; el.draggable=true; el.dataset.id=id;
-    el.innerHTML = `<input type="checkbox" ${s.on?'checked':''}><span>${s.name}</span><span class="drag">⋮⋮</span>`;
+    el.innerHTML = `<input type="checkbox" ${s.on?'checked':''}><span>${s.name}</span>`
+      + `<span class="brk${s.brk?' on':''}" title="Start this section on a new page">`
+      + `<input type="checkbox" class="brk-x"${s.brk?' checked':''}>New page</span>`
+      + `<span class="drag">⋮⋮</span>`;
     el.querySelector('input').onchange=e=>{s.on=e.target.checked;render();};
+    const brk=el.querySelector('.brk-x');
+    brk.onclick=e=>e.stopPropagation();          // the row is a <label>, so don't toggle "include" too
+    brk.onchange=e=>{ s.brk=e.target.checked; renderToggles(); render(); };
     el.ondragstart=ev=>{ev.dataTransfer.setData('id',id);el.classList.add('dragging');};
     el.ondragend=()=>el.classList.remove('dragging');
     el.ondragover=ev=>{ev.preventDefault();el.classList.add('over');};
@@ -1131,6 +1143,7 @@ function render(){
   const build=(merge)=>{
     const bl=[]; let placed=false;
     activeIds.forEach(id=>{
+      const start=bl.length;   // so only a section's FIRST block carries its page break
       if(merge && groupIds.includes(id)){
         if(placed) return;
         placed=true;
@@ -1140,6 +1153,7 @@ function render(){
       else if(id==='options'){ priceBlocks('options', optionsParts(), pageH).forEach(b=>bl.push(b)); }
       else if(id==='quote'){ priceBlocks('quote', quoteParts(), pageH).forEach(b=>bl.push(b)); }
       else bl.push({id, html:secHTML(id)});
+      if(bl.length>start && SECTIONS.find(s=>s.id===id)?.brk) bl[start].brk=true;
     });
     customs.forEach((c,idx)=>bl.push({id:'custom'+idx, html:`<div class="bar mt">${esc(c.title)}</div><p>${esc(c.body)}</p>`}));
     return bl;
@@ -1207,7 +1221,7 @@ function paginateInto(blocks, pageH){
   const pages=[]; let cur=[], curH=0, pageNo=2;
   blocks.forEach(b=>{
     let add = cur.length===0 ? b.solo : b.delta;
-    if(cur.length>0 && curH + add > pageH){ pages.push(cur); cur=[]; curH=0; pageNo++; add=b.solo; }
+    if(cur.length>0 && (b.brk || curH + add > pageH)){ pages.push(cur); cur=[]; curH=0; pageNo++; add=b.solo; }
     cur.push(b); curH += add; pageOf[b.id]=pageNo;
     if(b.members) b.members.forEach(m=>pageOf[m]=pageNo);
   });
@@ -1256,8 +1270,8 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 
 function snapshot(){
   const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
-  const toggles={}; SECTIONS.forEach(s=>toggles[s.id]=s.on);
-  return {ov:2, inputs, toggles, order:[...order], customs:clone(customs),
+  const toggles={}, breaks={}; SECTIONS.forEach(s=>{ toggles[s.id]=s.on; if(s.brk) breaks[s.id]=true; });
+  return {ov:2, inputs, toggles, breaks, order:[...order], customs:clone(customs),
           keyAspects:clone(keyAspects), aboutPhotos:clone(aboutPhotos), quoteItems:clone(quoteItems),
           retTiers:clone(retTiers), retAdhocOn,
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
@@ -1269,6 +1283,7 @@ function applyState(st){
   st=st||{};
   INPUT_IDS.forEach(id=>{ if(st.inputs && id in st.inputs) document.getElementById(id).value=st.inputs[id]; });
   if(st.toggles) SECTIONS.forEach(s=>{ if(s.id in st.toggles) s.on=st.toggles[s.id]; });
+  SECTIONS.forEach(s=>{ s.brk = !!(st.breaks && st.breaks[s.id]); });
   // v2 drafts keep their saved order; older drafts are reset to the natural template order once
   order = (st.ov===2 && Array.isArray(st.order) && st.order.length)
     ? st.order.filter(id=>SECTIONS.find(s=>s.id===id))
