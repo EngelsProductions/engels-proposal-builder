@@ -1557,6 +1557,7 @@ const AI_FIELDS = {
   day_rate_dop:'r-dop', day_rate_editor:'r-ed'
 };
 const aiNotes = s => s==='quote' ? quoteNotes : optNotes;
+const aiTerms = l => l==='retainer' ? retainerTerms : terms;
 // match column names case-insensitively and parse each cell the way typed input is parsed
 function aiCells(values){
   const cols=optCols(), out={};
@@ -1572,7 +1573,9 @@ function aiCells(values){
 const AI_TARGET = {
   add_quote_item:'quote', update_quote_item:'quote', remove_quote_item:'quote',
   add_option_row:'options', update_option_row:'options', remove_option_row:'options',
-  add_key_aspect:'keyaspects', add_term:'terms'
+  add_key_aspect:'keyaspects', update_key_aspect:'keyaspects', remove_key_aspect:'keyaspects',
+  add_term:'terms', update_term:'terms', remove_term:'terms',
+  update_retainer_tier:'scope'
 };
 
 // what the assistant is shown: the proposal's words and numbers, never the embedded photos
@@ -1590,6 +1593,8 @@ function aiState(){
     quote_options_columns: optCols(),
     quote_options_explanations: optNotes.map(n=>({label:n.label, text:n.text})),
     key_terms: terms.map(t=>({heading:t.h, body:t.b})),
+    retainer_terms: retainerTerms.map(t=>({heading:t.h, body:t.b})),
+    retainer_terms_included: chkRetTerms,
     custom_sections: customs.map(c=>({title:c.title, body:c.body})),
     retainer_tiers: retTiers.map(t=>({videos_per_month:t.videos, monthly_price:t.price}))
   };
@@ -1616,8 +1621,32 @@ const AI_APPLY = {
   add_key_aspect({label,text}){
     keyAspects.push({k:label,v:text}); renderKeyAspects(); return 'Added a key aspect';
   },
+  update_key_aspect({index,label,text}){
+    const a=keyAspects[index]; if(!a) throw Error('No key aspect at position '+index);
+    if(label!==undefined) a.k=label; if(text!==undefined) a.v=text;
+    renderKeyAspects(); return 'Rewrote a key aspect';
+  },
+  remove_key_aspect({index}){
+    if(!keyAspects[index]) throw Error('No key aspect at position '+index);
+    keyAspects.splice(index,1); renderKeyAspects(); return 'Removed a key aspect';
+  },
   add_custom_section({title,body}){
     customs.push({title,body}); renderCustoms(); renderToggles(); return 'Added the “'+title+'” section';
+  },
+  update_custom_section({index,title,body}){
+    const c=customs[index]; if(!c) throw Error('No bespoke section at position '+index);
+    if(title!==undefined) c.title=title; if(body!==undefined) c.body=body;
+    renderCustoms(); renderToggles(); return 'Rewrote a bespoke section';
+  },
+  remove_custom_section({index}){
+    if(!customs[index]) throw Error('No bespoke section at position '+index);
+    customs.splice(index,1); renderCustoms(); renderToggles(); return 'Removed a bespoke section';
+  },
+  update_retainer_tier({index,videos_per_month,monthly_price}){
+    const t=retTiers[index]; if(!t) throw Error('No retainer tier at position '+index);
+    if(videos_per_month!==undefined) t.videos=+videos_per_month;
+    if(monthly_price!==undefined) t.price=+monthly_price;
+    renderRetTiers(); return 'Updated a retainer tier';
   },
   add_quote_item({category,description,day_rate,days}){
     quoteItems.push({cat:category, desc:description, rate:String(day_rate), days:String(days)});
@@ -1649,8 +1678,18 @@ const AI_APPLY = {
     if(!optRows[index]) throw Error('No Quote Options row at position '+index);
     optRows.splice(index,1); renderOptions(); return 'Removed a Quote Options row';
   },
-  add_term({heading,body}){
-    terms.push({h:heading,b:body}); renderTerms(); return 'Added a term';
+  add_term({heading,body,list}){
+    aiTerms(list).push({h:heading,b:body}); renderTerms(); renderRetTerms();
+    return 'Added a term';
+  },
+  update_term({index,heading,body,list}){
+    const t=aiTerms(list)[index]; if(!t) throw Error('No term at position '+index);
+    if(heading!==undefined) t.h=heading; if(body!==undefined) t.b=body;
+    renderTerms(); renderRetTerms(); return 'Rewrote a term';
+  },
+  remove_term({index,list}){
+    const a=aiTerms(list); if(!a[index]) throw Error('No term at position '+index);
+    a.splice(index,1); renderTerms(); renderRetTerms(); return 'Removed a term';
   },
   toggle_section({section,on}){
     const s=SECTIONS.find(x=>x.id===section); if(!s) throw Error('Unknown section: '+section);

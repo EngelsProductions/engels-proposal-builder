@@ -102,6 +102,66 @@ const TOOLS = [
     },
   },
   {
+    name: "update_key_aspect",
+    description: "Reword an existing Key Aspects line, identified by its position (0 is the first).",
+    input_schema: {
+      type: "object",
+      properties: {
+        index: { type: "integer" },
+        label: { type: "string", description: "New bold lead-in. Omit to leave unchanged." },
+        text: { type: "string", description: "New text. Omit to leave unchanged." },
+      },
+      required: ["index"],
+    },
+  },
+  {
+    name: "remove_key_aspect",
+    description: "Delete a Key Aspects line by its position.",
+    input_schema: {
+      type: "object",
+      properties: { index: { type: "integer" } },
+      required: ["index"],
+    },
+  },
+  {
+    name: "update_custom_section",
+    description: "Rewrite a bespoke section's heading or body, identified by its position (0 is the first).",
+    input_schema: {
+      type: "object",
+      properties: {
+        index: { type: "integer" },
+        title: { type: "string", description: "New heading. Omit to leave unchanged." },
+        body: { type: "string", description: "New body copy. Omit to leave unchanged." },
+      },
+      required: ["index"],
+    },
+  },
+  {
+    name: "remove_custom_section",
+    description: "Delete a bespoke section by its position.",
+    input_schema: {
+      type: "object",
+      properties: { index: { type: "integer" } },
+      required: ["index"],
+    },
+  },
+  {
+    name: "update_retainer_tier",
+    description:
+      "Change a Monthly Retainer Options column by its position (0 is the left-most). " +
+      "Each tier is a number of videos per month at a monthly price; the effective rate per " +
+      "video and the saving are recalculated automatically.",
+    input_schema: {
+      type: "object",
+      properties: {
+        index: { type: "integer", description: "Zero-based column position." },
+        videos_per_month: { type: "number" },
+        monthly_price: { type: "number" },
+      },
+      required: ["index"],
+    },
+  },
+  {
     name: "add_custom_section",
     description:
       "Add a bespoke section: a navy section bar with a heading, followed by body copy. " +
@@ -205,14 +265,49 @@ const TOOLS = [
   },
   {
     name: "add_term",
-    description: "Add a term to Key Terms & Conditions: a short heading and a paragraph.",
+    description:
+      "Add a term to Key Terms & Conditions: a short heading and a paragraph. " +
+      "Use list 'retainer' only for terms that apply to an ongoing retainer.",
     input_schema: {
       type: "object",
       properties: {
         heading: { type: "string" },
         body: { type: "string" },
+        list: {
+          type: "string",
+          enum: ["standard", "retainer"],
+          description: "Which list to add to. Defaults to standard.",
+        },
       },
       required: ["heading", "body"],
+    },
+  },
+  {
+    name: "update_term",
+    description:
+      "Rewrite an existing term, identified by its position in the list (0 is the first). " +
+      "Use this to reword or correct a term rather than adding a second one saying something similar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        index: { type: "integer", description: "Zero-based position in that list." },
+        heading: { type: "string", description: "New heading. Omit to leave unchanged." },
+        body: { type: "string", description: "New body. Omit to leave unchanged." },
+        list: { type: "string", enum: ["standard", "retainer"], description: "Defaults to standard." },
+      },
+      required: ["index"],
+    },
+  },
+  {
+    name: "remove_term",
+    description: "Delete a term by its position in the list.",
+    input_schema: {
+      type: "object",
+      properties: {
+        index: { type: "integer" },
+        list: { type: "string", enum: ["standard", "retainer"], description: "Defaults to standard." },
+      },
+      required: ["index"],
     },
   },
   {
@@ -256,8 +351,14 @@ asks for "the quote table", they mean whichever one is currently included. Addin
 listed in sections_hidden puts the content somewhere they cannot see — if that is genuinely what
 they want, call toggle_section to switch it on in the same turn, and say you have done so.
 
+Key Terms & Conditions holds two lists: the standard terms, and retainer-specific terms that
+only print when retainer_terms_included is true. When asked to change wording that already
+exists, call update_term on the entry rather than adding a near-duplicate.
+
 How to work:
 - You are given the proposal's current contents. Read it before acting so your additions fit what is there.
+- When the user says "update", "change", "reword" or "fix" something that already exists, use the
+  update_* tool for that item. Only add a new entry when they are genuinely asking for one more.
 - Make every change the request implies, in one go — several tool calls in one turn is normal and expected.
 - Positions in lists are zero-based and refer to the state you were given.
 - If the request is ambiguous in a way that changes what you would write, make the reasonable choice and
