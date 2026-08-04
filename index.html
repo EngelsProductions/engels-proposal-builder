@@ -122,6 +122,12 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .ph .rf .in img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 .ph .rf::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(255,255,255,.5),#fff 78%);}
 table.price{width:100%;border-collapse:collapse;margin:4pt 0 4pt;font-size:10pt;}
+/* equal tier columns: fixed layout splits the space left by the label column evenly between
+   them, however many there are. Without it the browser sizes each column to its contents, so
+   a column holding "Unlimited" ends up wider than one holding a price. */
+table.price.eqcols{table-layout:fixed;}
+table.price.eqcols th.rh,table.price.eqcols thead th:first-child{width:34%;}
+table.price.eqcols td,table.price.eqcols th{overflow-wrap:break-word;}
 table.price th,table.price td{padding:7pt 10pt;border-bottom:1px solid var(--line);text-align:left;}
 table.price thead th{background:var(--navy);color:#fff;font-weight:600;border:none;}
 table.price thead th.c,table.price td.c{text-align:center;}
@@ -306,6 +312,8 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <label class="f">Intro line<textarea id="i-optintro">If it helps, here are a few options at different levels of investment — pick whichever best fits your budget.</textarea></label>
       <label class="f" style="margin-bottom:5px;">Columns to show — auto-ordered budget → premium (max 4)</label>
       <div id="opt-tierchecks"></div>
+      <label class="toggle" style="margin:9px 0 2px;"><input type="checkbox" id="chk-eqcols" checked><span>Keep columns the same width</span></label>
+      <p class="hint" style="margin-top:2px;">Untick to let each column size itself to its contents.</p>
       <label class="f" style="margin:10px 0 5px;">Categories &amp; values — type a £ amount, ✓ for included, short text (e.g. “2 rounds”), or leave blank for a dash</label>
       <div id="opt-rows"></div>
       <button class="btn ghost" id="add-optrow">+ Add category</button>
@@ -449,6 +457,7 @@ let aboutPhotos = []; // optional About photos {src, side:'l'|'r', size:'s'|'m'|
 let optNotes = [];   // cost explanations {label, text} — quote options
 let quoteNotes = []; // cost explanations {label, text} — project quote
 let showQuoteDays = true;  // show the day-rate/days columns on the project quote
+let optEqCols = true;      // give the Quote Options tier columns equal widths
 let optTotals = {};  // manual per-tier total override (blank = auto-sum of numeric cells)
 // interpret a typed cell: blank -> dash, tick words -> '✓', a pure number -> price,
 // anything else -> kept as free text so a cell can read e.g. "2 rounds" or "Bespoke"
@@ -657,6 +666,7 @@ function renderQuote(){
 }
 document.getElementById('add-quotenote').onclick=()=>{ quoteNotes.push({label:'',text:''}); renderQuote(); render(); };
 document.getElementById('chk-quotedays').onchange=e=>{ showQuoteDays=e.target.checked; render(); };
+document.getElementById('chk-eqcols').onchange=e=>{ optEqCols=e.target.checked; render(); };
 
 // ---- quote options (comparison matrix) ----
 function renderOptions(){
@@ -979,6 +989,7 @@ function optionsParts(){
   const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
   const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
   return {
+    tableClass: optEqCols ? ' eqcols' : '',
     head: `<div class="bar mt">QUOTE OPTIONS</div>`
       + (val('i-optintro').trim()?`<p>${esc(val('i-optintro'))}</p>`:''),
     thead: `<thead><tr><th class="rh">&nbsp;</th>${cols.map(c=>`<th class="c">${esc(c)}</th>`).join('')}</tr></thead>`,
@@ -991,7 +1002,7 @@ function optionsParts(){
     notes: notesListFor(optNotes)
   };
 }
-const priceTable=(p,rows)=>`<table class="price">${p.thead}<tbody>${rows.join('')}</tbody></table>`;
+const priceTable=(p,rows)=>`<table class="price${p.tableClass||''}">${p.thead}<tbody>${rows.join('')}</tbody></table>`;
 // a pricing section rendered whole, for measuring and for anywhere it isn't being paginated
 const priceSectionHTML=p => p.head + priceTable(p, p.rows.concat(p.summary)) + p.vat
   + (p.notes.length?`<div style="margin-top:22pt;">${p.notes.join('')}</div>`:'');
@@ -1186,7 +1197,7 @@ function snapshot(){
           keyAspects:clone(keyAspects), aboutPhotos:clone(aboutPhotos), quoteItems:clone(quoteItems),
           retTiers:clone(retTiers), retAdhocOn,
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
-          quoteNotes:clone(quoteNotes), showQuoteDays,
+          quoteNotes:clone(quoteNotes), showQuoteDays, optEqCols,
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
@@ -1226,6 +1237,8 @@ function applyState(st){
   quoteNotes = Array.isArray(st.quoteNotes) ? clone(st.quoteNotes) : [];
   showQuoteDays = st.showQuoteDays!==false;
   document.getElementById('chk-quotedays').checked = showQuoteDays;
+  optEqCols = st.optEqCols!==false;
+  document.getElementById('chk-eqcols').checked = optEqCols;
   terms = Array.isArray(st.terms) ? clone(st.terms) : DEFAULT_TERMS.map(t=>({...t}));
   retainerTerms = Array.isArray(st.retainerTerms) ? clone(st.retainerTerms) : DEFAULT_RETAINER_TERMS.map(t=>({...t}));
   chkRetTerms = !!st.chkRetTerms;
