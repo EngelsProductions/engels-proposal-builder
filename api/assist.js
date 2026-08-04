@@ -167,7 +167,9 @@ const TOOLS = [
           type: "object",
           description:
             "Value per column, keyed by the exact column name shown in quote_options_columns. " +
-            "A number is shown as a price; the word 'yes' becomes a tick; short text such as " +
+            "A number is shown as a price ('900' prints as £900); a number prefixed with # is shown " +
+            "as a plain count and is not treated as money ('#3' prints as 3, for things like a number " +
+            "of videos or revision rounds); the word 'yes' becomes a tick; short text such as " +
             "'2 rounds' or 'Unlimited' is shown as written. Omit a column to leave it blank.",
           additionalProperties: { type: "string" },
         },

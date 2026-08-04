@@ -320,7 +320,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <label class="f" style="margin:14px 0 5px;">Cost explanations (optional)</label>
       <div id="opt-notes"></div>
       <button class="btn ghost" id="add-optnote">+ Add explanation</button>
-      <p class="hint">Use ✓ marks, £ amounts, or short text in any cell. £ amounts auto-sum into the total; ✓ and text don’t. Tick “Quote Options” in the sections list to include it.</p>
+      <p class="hint">Use ✓ marks, £ amounts, or short text in any cell. Prefix a number with # for a plain count — <b>3</b> shows as £3, <b>#3</b> shows as 3. £ amounts auto-sum into the total; ✓, text and # counts don’t. Drag the grip to reorder rows. Tick “Quote Options” in the sections list to include it.</p>
     </div>
 
     <div class="grp">
@@ -463,6 +463,10 @@ function parseCell(raw){
 function cellDisplay(v){
   if(isNum(v)) return gbp(v);
   if(v==='✓') return '<span style="color:var(--blue);font-weight:700;">✓</span>';
+  // a leading # escapes the currency formatting: "#3" prints as 3, "3" prints as £3.
+  // The # stays in the stored value so the editor round-trips it and it isn't summed
+  // into the column total — it isn't money.
+  if(typeof v==='string' && v.trim().startsWith('#')) return esc(v.trim().slice(1).trim());
   if(typeof v==='string' && v.trim()!=='') return esc(v);   // free text
   return '—';
 }
@@ -634,7 +638,7 @@ function renderQuote(){
   const w=document.getElementById('quote-list'); w.innerHTML='';
   quoteItems.forEach((it,i)=>{
     const d=document.createElement('div'); d.className='customsec';
-    d.innerHTML=`<span class="x" title="remove">✕</span>
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
       <label class="f">Category<input type="text" class="q-cat" value="${(it.cat||'').replace(/"/g,'&quot;')}"></label>
       <label class="f">Description<input type="text" class="q-desc" value="${(it.desc||'').replace(/"/g,'&quot;')}"></label>
       <div class="row">
@@ -648,6 +652,7 @@ function renderQuote(){
     d.querySelector('.q-days').oninput=e=>{it.days=parseFloat(e.target.value)||0;render();};
     w.appendChild(d);
   });
+  makeDraggable(w, quoteItems, renderQuote);
   renderNoteList(quoteNotes, 'quote-notes', renderQuote);
 }
 document.getElementById('add-quotenote').onclick=()=>{ quoteNotes.push({label:'',text:''}); renderQuote(); render(); };
@@ -677,7 +682,7 @@ function renderOptions(){
       const d=document.createElement('div'); d.className='customsec';
       const cellVal=v=>isNum(v)?v:(v==='✓'?'✓':(typeof v==='string'?v:''));
       const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(c)}<input type="text" class="ov" data-t="${esc(c)}" value="${String(cellVal(r.vals[c])).replace(/"/g,'&quot;')}" placeholder="—"></label>`).join('');
-      d.innerHTML=`<span class="x" title="remove">✕</span>
+      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
         <label class="f">Category<input type="text" class="ocat" value="${(r.cat||'').replace(/"/g,'&quot;')}"></label>
         <div class="row" style="flex-wrap:wrap;gap:7px;">${cells||'<span class="hint">Tick a column above first.</span>'}</div>`;
       d.querySelector('.x').onclick=()=>{optRows.splice(ri,1);renderOptions();render();};
@@ -685,6 +690,7 @@ function renderOptions(){
       d.querySelectorAll('.ov').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, pv=parseCell(e.target.value); if(pv===undefined) delete r.vals[t]; else r.vals[t]=pv; render(); }; });
       w.appendChild(d);
     });
+    makeDraggable(w, optRows, renderOptions);
   }
   // per-tier total row (blank = auto-sum of numeric cells)
   const tw2=document.getElementById('opt-totals');
