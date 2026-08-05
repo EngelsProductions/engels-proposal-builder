@@ -427,7 +427,11 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <label class="f">Wording<textarea id="i-next" style="min-height:110px;">Once you've read this through, let me know which option works best and I'll draw up the Terms of Engagement for both parties to sign, and we can plan the first month in.
 
 If you have any questions about pricing or scope, please do get in touch.</textarea></label>
-      <p class="hint">A blank line starts a new paragraph. The “Yours sincerely” sign-off and signature are added automatically.</p>
+      <label class="f">Sign-off<select id="i-signoff">
+        <option value="Yours sincerely">Yours sincerely</option>
+        <option value="Kind regards">Kind regards</option>
+      </select></label>
+      <p class="hint">A blank line starts a new paragraph. The sign-off and signature are added automatically.</p>
     </div>
 
     <div class="grp">
@@ -1343,6 +1347,9 @@ function refreshCover(){ applyDuotone(coverIsDefault?COVER_DEFAULT:coverSrc, out
 const val=id=>document.getElementById(id).value;
 const num=id=>parseFloat(document.getElementById(id).value)||0;
 const gbp=n=>'£'+Math.round(n).toLocaleString('en-GB');
+// the sign-off above the signature; an unrecognised value falls back rather than printing a blank line
+const SIGNOFFS=['Yours sincerely','Kind regards'];
+const signOff=()=>{ const v=val('i-signoff'); return SIGNOFFS.includes(v)?v:SIGNOFFS[0]; };
 // a negative amount reads as "−£500", the way the discount rows write it — never "£-500"
 const gbpSigned=n=>n<0 ? '−'+gbp(Math.abs(n)) : gbp(n);
 // the pricing tables' bottom row is editable; an empty box falls back to the default rather
@@ -1466,7 +1473,7 @@ function secHTML(id){
       <p>${esc(val('i-retainer'))}</p>`;
    case 'next': return `<div class="bar mt">NEXT STEPS</div>
       ${val('i-next').split(/\n\n+/).map(p=>`<p>${esc(p)}</p>`).join('')}
-      <p style="margin-top:14pt;">Yours sincerely</p>
+      <p style="margin-top:14pt;">${esc(signOff())}</p>
       <div class="sig"><img class="sigimg" src="${SIG}" alt="Jack Gilbey signature"><div class="n">Jack Gilbey</div><div class="co">Engels Productions</div></div>`;
   }
   return '';
@@ -1728,7 +1735,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-signoff'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -1780,6 +1787,7 @@ function applyState(st){
   ['i-quote-totlabel','i-opt-totlabel'].forEach(id=>{
     if(!(st.inputs && id in st.inputs)) document.getElementById(id).value='Total Investment';
   });
+  if(!(st.inputs && 'i-signoff' in st.inputs)) document.getElementById('i-signoff').value=SIGNOFFS[0];
   optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
   if(!optTiers.length) optTiers = DEFAULT_OPTTIERS.slice();
   optRows = Array.isArray(st.optRows) ? clone(st.optRows) : DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
@@ -1994,6 +2002,7 @@ document.querySelector('.panel').addEventListener('keydown',e=>{
 });
 document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('i-optdisc-type').addEventListener('change',render);
+document.getElementById('i-signoff').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
 
 // ---- init: capture pristine defaults, then load saved drafts ----
