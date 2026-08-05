@@ -22,6 +22,7 @@ const FIELDS = [
   "retainer_note", "next_steps", "portfolio_intro", "portfolio_url",
   "portfolio_link_label", "retainer_row_label", "ad_hoc_rate",
   "day_rate_dop", "day_rate_editor",
+  "project_quote_total_label", "quote_options_total_label",
 ];
 
 const SECTIONS = [
@@ -56,7 +57,7 @@ const TOOLS = [
       properties: {
         section: { type: "string", enum: ["quote", "options"], description: "Which pricing table it sits under." },
         label: { type: "string", description: "Short bold lead-in, e.g. 'Why four camera angles'." },
-        text: { type: "string", description: "The explanation. Normally one paragraph; where the user wants points set out, put each on its own line starting with '- '." },
+        text: { type: "string", description: "The explanation. Normally one paragraph; a line starting with '- ' becomes a bullet, and a line like '| Videos | Rate | Total |' becomes a table row (first one is the heading) for a worked example." },
       },
       required: ["section", "label", "text"],
     },
@@ -70,7 +71,7 @@ const TOOLS = [
         section: { type: "string", enum: ["quote", "options"] },
         index: { type: "integer", description: "Zero-based position in that section's explanation list." },
         label: { type: "string", description: "New label. Omit to leave unchanged." },
-        text: { type: "string", description: "New text. Lines starting with '- ' become bullets. Omit to leave unchanged." },
+        text: { type: "string", description: "New text. Lines starting with '- ' become bullets; lines of '| cell | cell |' become a table. Omit to leave unchanged." },
       },
       required: ["section", "index"],
     },
@@ -338,10 +339,18 @@ Bulleted points are presented in this proposal as lines in the Key Aspects callo
 followed by a sentence. When asked for bullet points, call add_key_aspect once per point. Do not try to
 write dashes, asterisks or numbered lists into a paragraph — that is not how this document sets out lists.
 
-The one exception is the text of a cost explanation, which may set out points beneath a pricing table.
-There, a line beginning "- " is rendered as a bullet: put each point on its own line, starting with "- ",
-and keep any ordinary prose on separate lines above or below them. This is a plain-text convention the
-builder understands, not markup — never use it in any other field, and never write bullets any other way.
+The one exception is the text of a cost explanation, which may set out points or a worked example
+beneath a pricing table. There, two line prefixes are understood:
+  "- point"            renders as a bullet
+  "| Videos | Rate |"  renders as a table row, the first such line being the heading row
+Put each bullet or row on its own line and keep ordinary prose on separate lines above or below them.
+A worked example is the one place a table belongs outside the pricing tables themselves — use it when
+the user wants to show how a figure is arrived at, and keep it to a few short rows. These are plain-text
+conventions the builder understands, not markup — never use them in any other field, and never write
+bullets or tables any other way.
+
+The bottom row of each pricing table reads "Total Investment" by default and can be renamed with
+set_field: project_quote_total_label and quote_options_total_label. Only change it when asked.
 
 Writing style, which you must match exactly:
 - British English spelling: optimise, colour, programme, specialise, organise.

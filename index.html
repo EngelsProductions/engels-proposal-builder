@@ -155,6 +155,9 @@ table.rates{width:100%;border-collapse:collapse;margin:5pt 0;font-size:10pt;}
 table.rates th,table.rates td{padding:6.5pt 12pt;border-bottom:1px solid var(--line);text-align:left;}
 table.rates thead th{background:var(--navy);color:#fff;font-weight:600;}
 table.rates td.r{text-align:right;font-weight:600;color:var(--navy);}
+/* worked-example tables typed into a cost explanation reuse the day-rates table above; these
+   rules only set alignment, so a number column lines up under its own heading */
+table.rates td.n,table.rates th.n,table.rates th.r{text-align:right;}
 .note{font-size:10pt;color:var(--ink);line-height:1.6;margin:9pt 0 0;}
 /* cost-explanation bullets — a line typed as "- point" in the explanation box. Same 10pt copy as
    the paragraphs around it, hung off a blue marker so wrapped lines line up under the text rather
@@ -328,10 +331,12 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-disc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-disc-val" value="0"></label>
       </div>
+      <label class="f" style="margin-top:10px;">Total row label<input type="text" id="i-quote-totlabel" value="Total Investment"></label>
       <div class="calc" id="quote-out"></div>
-      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — start a line with “- ” for a bullet point</label>
+      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — “- ” starts a bullet, “| a | b |” a table row</label>
       <div id="quote-notes"></div>
       <button class="btn ghost" id="add-quotenote">+ Add explanation</button>
+      <p class="hint">For a worked example, put each row on its own line as <b>| Videos | Rate | Total |</b> — the first row is the heading, and columns of numbers align right automatically.</p>
       <p class="hint">Tick “Project Quote (one-off)” above to include this instead of the retainer table.</p>
     </div>
 
@@ -353,9 +358,11 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-optdisc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-optdisc-val" value="0"></label>
       </div>
-      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — start a line with “- ” for a bullet point</label>
+      <label class="f" style="margin-top:10px;">Total row label<input type="text" id="i-opt-totlabel" value="Total Investment"></label>
+      <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — “- ” starts a bullet, “| a | b |” a table row</label>
       <div id="opt-notes"></div>
       <button class="btn ghost" id="add-optnote">+ Add explanation</button>
+      <p class="hint">For a worked example, put each row on its own line as <b>| Videos | Rate | Total |</b> — the first row is the heading, and columns of numbers align right automatically.</p>
       <p class="hint">Use ✓ marks, £ amounts, or short text in any cell. Prefix a number with # for a plain count — <b>3</b> shows as £3, <b>#3</b> shows as 3. £ amounts auto-sum into the total; ✓, text and # counts don’t. Drag the grip to reorder rows. Tick “Quote Options” in the sections list to include it.</p>
     </div>
 
@@ -811,13 +818,31 @@ function renderNoteList(arr, elId, rerender){
   makeDraggable(w, arr, rerender);
 }
 // cost explanations rendered into the proposal
-// The text is plain, but a line starting with "- " (or "• ") becomes a bullet, so an explanation can
-// set out several points instead of running as one paragraph. Consecutive bullet lines group into a
-// single block; every other line stays a paragraph and behaves exactly as it did before.
+// The text is plain, but two line prefixes give it structure, so an explanation can set out points or
+// a worked example instead of running as one paragraph:
+//   "- point"              a bullet
+//   "| cell | cell |"      a table row, the first one being the header
+// Consecutive lines of a kind group into one block; every other line stays a paragraph and behaves
+// exactly as it did before. The table is the existing day-rates table, not a new component.
+const NUMERIC=/^[£$€]?\s*-?[\d,]+(\.\d+)?\s*%?$/;
+function tableHtml(rows){
+  const head=rows[0], body=rows.slice(1);
+  // a column is a number column only if every filled cell in it is a number, so headings and
+  // totals line up to the right the way they do on the day-rates table
+  const numeric=head.map((_,i)=>{
+    const cells=body.map(r=>(r[i]||'').trim()).filter(Boolean);
+    return cells.length>0 && cells.every(c=>NUMERIC.test(c));
+  });
+  const last=numeric.lastIndexOf(true);   // the value column carries the emphasis, as it does above
+  const cls=i=>numeric[i] ? (i===last?' class="r"':' class="n"') : '';
+  return `<table class="rates"><thead><tr>${head.map((c,i)=>`<th${cls(i)}>${esc(c)}</th>`).join('')}</tr></thead>`
+    + (body.length?`<tbody>${body.map(r=>`<tr>${head.map((_,i)=>`<td${cls(i)}>${esc(r[i]||'')}</td>`).join('')}</tr>`).join('')}</tbody>`:'')
+    + `</table>`;
+}
 function noteBody(text){
-  const out=[]; let bullets=[], para=[];
+  const out=[]; let bullets=[], para=[], rows=[];
   const flushPara=()=>{
-    while(para.length && !para[para.length-1].trim()) para.pop();   // no trailing <br> before a bullet run
+    while(para.length && !para[para.length-1].trim()) para.pop();   // no trailing <br> before a bullet or table run
     if(para.length) out.push(`<p>${para.map(esc).join('<br>')}</p>`);
     para=[];
   };
@@ -825,12 +850,18 @@ function noteBody(text){
     if(bullets.length) out.push(`<div class="blts">${bullets.map(b=>`<p>${esc(b)}</p>`).join('')}</div>`);
     bullets=[];
   };
+  const flushRows=()=>{ if(rows.length) out.push(tableHtml(rows)); rows=[]; };
   (text||'').split('\n').forEach(line=>{
-    const m=line.match(/^\s*[-•]\s+(.+)$/);
-    if(m){ flushPara(); bullets.push(m[1]); }
-    else { flushBullets(); para.push(line); }
+    const t=line.trim(), bul=line.match(/^\s*[-•]\s+(.+)$/);
+    if(t.startsWith('|')){
+      const cells=t.replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim());
+      // tolerate a markdown separator row (|---|---|) — typed out of habit, never shown
+      if(!cells.every(c=>/^:?-{2,}:?$/.test(c))){ flushPara(); flushBullets(); rows.push(cells); }
+    }
+    else if(bul){ flushPara(); flushRows(); bullets.push(bul[1]); }
+    else { flushBullets(); flushRows(); para.push(line); }
   });
-  flushPara(); flushBullets();
+  flushPara(); flushBullets(); flushRows();
   return out;
 }
 function noteHtmlFor(n){
@@ -924,6 +955,9 @@ function refreshCover(){ applyDuotone(coverIsDefault?COVER_DEFAULT:coverSrc, out
 const val=id=>document.getElementById(id).value;
 const num=id=>parseFloat(document.getElementById(id).value)||0;
 const gbp=n=>'£'+Math.round(n).toLocaleString('en-GB');
+// the pricing tables' bottom row is editable; an empty box falls back to the default rather
+// than printing a blank total row (which reads as a mistake on a sent proposal)
+const totLabel=id=>val(id).trim()||'Total Investment';
 // escape, then turn **bold** markers into real bold (⌘B in the panel inserts the markers)
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>')
@@ -1089,7 +1123,7 @@ function quoteParts(){
     // subtotal / discount / total always travel together as one indivisible group
     summary: (q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:left;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
         <tr><td colspan="${span}" style="text-align:left;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:'')
-      + `<tr class="total"><td colspan="${span}" style="text-align:left;">Total Investment</td><td class="c">${gbp(q.grand)}</td></tr>`,
+      + `<tr class="total"><td colspan="${span}" style="text-align:left;">${esc(totLabel('i-quote-totlabel'))}</td><td class="c">${gbp(q.grand)}</td></tr>`,
     vat: `<p class="note">${VAT_NOTE}</p>`,
     notes: notesListFor(quoteNotes)
   };
@@ -1109,7 +1143,7 @@ function optionsParts(){
     // subtotal / discount / total always travel together as one indivisible group
     summary: (hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
         <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:'')
-      + `<tr class="total"><td>Total Investment</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`,
+      + `<tr class="total"><td>${esc(totLabel('i-opt-totlabel'))}</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`,
     vat: `<p class="note">${VAT_NOTE}</p>`,
     notes: notesListFor(optNotes)
   };
@@ -1299,7 +1333,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -1344,6 +1378,10 @@ function applyState(st){
   document.getElementById('chk-adhoc').checked = retAdhocOn;
   // older drafts have no row label stored — fall back to the default rather than a stale value
   if(!(st.inputs && 'i-retlabel' in st.inputs)) document.getElementById('i-retlabel').value='Short-form lifestyle video';
+  // likewise the editable total row, added later than the drafts that predate it
+  ['i-quote-totlabel','i-opt-totlabel'].forEach(id=>{
+    if(!(st.inputs && id in st.inputs)) document.getElementById(id).value='Total Investment';
+  });
   optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
   if(!optTiers.length) optTiers = DEFAULT_OPTTIERS.slice();
   optRows = Array.isArray(st.optRows) ? clone(st.optRows) : DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
@@ -1540,7 +1578,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#i-retlabel,#p-adhoc,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#i-retlabel,#p-adhoc,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val,#i-quote-totlabel,#i-opt-totlabel')
   .forEach(el=>el.addEventListener('input',render));
 // ⌘B / Ctrl+B in any panel text field wraps the selection in **bold** markers
 document.querySelector('.panel').addEventListener('keydown',e=>{
@@ -1605,7 +1643,8 @@ const AI_FIELDS = {
   retainer_note:'i-retainer', next_steps:'i-next', portfolio_intro:'i-portintro',
   portfolio_url:'i-porturl', portfolio_link_label:'i-portlabel',
   retainer_row_label:'i-retlabel', ad_hoc_rate:'p-adhoc',
-  day_rate_dop:'r-dop', day_rate_editor:'r-ed'
+  day_rate_dop:'r-dop', day_rate_editor:'r-ed',
+  project_quote_total_label:'i-quote-totlabel', quote_options_total_label:'i-opt-totlabel'
 };
 const aiNotes = s => s==='quote' ? quoteNotes : optNotes;
 const aiTerms = l => l==='retainer' ? retainerTerms : terms;
