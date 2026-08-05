@@ -135,7 +135,10 @@ label.f input:focus,label.f textarea:focus,label.f select:focus,.cg-gr input:foc
 .c-meta span{color:#eaf9ff;font-size:9.5pt;letter-spacing:.05em;}
 
 /* content */
-.bar{background:var(--navy);color:#fff;font-weight:600;font-size:12.5pt;letter-spacing:.05em;padding:8pt 13pt;border-radius:3px;margin:0 0 13pt;}
+/* Section bars are set in capitals. The built-in ones are written that way in the markup; a bespoke
+   title is typed however reads best and is capitalised here, so the same words can stay in sentence
+   case in the contents list, which is styled by .toc-lbl and unaffected by this. */
+.bar{background:var(--navy);color:#fff;font-weight:600;font-size:12.5pt;letter-spacing:.05em;padding:8pt 13pt;border-radius:3px;margin:0 0 13pt;text-transform:uppercase;}
 .bar.mt{margin-top:18pt;}
 .lead{color:var(--navy);font-weight:500;}
 .callout{background:var(--box);color:#fff;border-radius:8px;padding:13pt 16pt 5pt;margin:6pt 0 12pt;display:flow-root;}
