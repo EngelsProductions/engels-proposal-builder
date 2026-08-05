@@ -31,11 +31,11 @@ html,body{margin:0;height:100%;font-family:"Poppins",system-ui,sans-serif;backgr
 .grp{padding:16px 20px;border-bottom:1px solid var(--panel-line);}
 .grp h4{margin:0 0 12px;font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#7d8fce;}
 label.f{display:block;margin:0 0 11px;font-size:11px;color:#aab6e6;}
-label.f input[type=text],label.f input[type=number],label.f textarea,label.f select{
+label.f input[type=text],label.f input[type=number],label.f textarea,label.f select,.cg-gr input{
   width:100%;margin-top:5px;background:var(--panel-2);border:1px solid var(--panel-line);color:#fff;
   border-radius:7px;padding:8px 10px;font-family:inherit;font-size:12.5px;}
 label.f textarea{resize:vertical;min-height:130px;line-height:1.5;}
-label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;border-color:var(--blue);}
+label.f input:focus,label.f textarea:focus,label.f select:focus,.cg-gr input:focus{outline:none;border-color:var(--blue);}
 .row{display:flex;gap:9px;}
 .row>*{flex:1;}
 .toggle{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;margin-bottom:8px;cursor:pointer;user-select:none;font-size:12.5px;}
@@ -62,8 +62,21 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .customsec.dragging{opacity:.45;}
 .customsec.over{border-color:var(--blue);}
 /* the row of "+ Paragraph / + Table / ..." buttons on a bespoke section — panel furniture only */
-.c-add{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
-.c-add .btn{width:auto;flex:1 1 auto;margin:0;padding:7px 10px;font-size:12px;}
+.cg-add{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
+.cg-add .btn{width:auto;flex:1 1 auto;margin:0;padding:7px 10px;font-size:12px;}
+/* a table block is edited as a grid of cells, not a text box — one input per cell, a row of
+   column-removers above it, and the heading row picked out at the top */
+.cg-gr{display:flex;gap:5px;align-items:center;}
+.cg-gr input{margin-top:0;flex:1 1 0;min-width:0;padding:7px 8px;}
+.cg-gh input{font-weight:600;color:#dbe6ff;}
+.cg-gx{display:flex;gap:5px;margin-bottom:4px;}
+.cg-cx,.cg-rx{flex:0 0 17px;width:17px;text-align:center;color:#5b6398;cursor:pointer;font-size:11px;
+  background:none;border:none;padding:0;font-family:inherit;line-height:1;}
+.cg-cx{flex:1 1 0;}
+.cg-cx:hover,.cg-rx:hover{color:var(--blue);}
+.cg-grid{display:flex;flex-direction:column;gap:5px;}
+.cg-gbtn{display:flex;gap:6px;margin-top:7px;}
+.cg-gbtn .btn{width:auto;flex:1 1 auto;margin:0;padding:6px 9px;font-size:11.5px;}
 .draft{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;margin-bottom:8px;font-size:12.5px;}
 .draft.active{border-color:var(--blue);}
 .draft .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
@@ -571,7 +584,7 @@ const CBLOCK = {
   p:     {name:'Paragraphs',  hint:'A blank line starts a new paragraph.'},
   sub:   {name:'Sub-heading', hint:'One short line.'},
   bul:   {name:'Bullets',     hint:'One bullet per line.'},
-  tbl:   {name:'Table',       hint:'One row per line, as | Videos | Rate | Total |. The first row is the heading; number columns align right.'},
+  tbl:   {name:'Table',       hint:'The top row is the heading. Columns of numbers align right automatically.'},
   call:  {name:'Callout box', hint:'One point per line, written as “Label: text”.'},
   photo: {name:'Photo',       hint:''}
 };
@@ -618,12 +631,12 @@ function renderCustoms(){
     g.className='grp collapsible'+(customOpen.has(c.id)?' open':'');
     g.innerHTML=`<h4><span class="cg-name"></span><span class="chev">▶</span></h4>
       <div class="grp-body">
-        <label class="f">Section title<input type="text" class="c-title"></label>
-        <div class="c-blocks"></div>
-        <div class="c-add">${Object.keys(CBLOCK).map(t=>`<button class="btn ghost" data-t="${t}">+ ${CBLOCK[t].name}</button>`).join('')}</div>
-        <button class="btn ghost c-del">Remove this section</button>
+        <label class="f">Section title<input type="text" class="cg-title"></label>
+        <div class="cg-blocks"></div>
+        <div class="cg-add">${Object.keys(CBLOCK).map(t=>`<button class="btn ghost" data-t="${t}">+ ${CBLOCK[t].name}</button>`).join('')}</div>
+        <button class="btn ghost cg-del">Remove this section</button>
       </div>`;
-    const name=g.querySelector('.cg-name'), ti=g.querySelector('.c-title');
+    const name=g.querySelector('.cg-name'), ti=g.querySelector('.cg-title');
     name.textContent=(c.title||'').trim()||'Bespoke section';
     ti.value=c.title||'';
     g.querySelector('h4').onclick=()=>{
@@ -636,12 +649,12 @@ function renderCustoms(){
       name.textContent=(c.title||'').trim()||'Bespoke section';
       syncCustomSections(); renderToggles(); render();
     };
-    g.querySelector('.c-del').onclick=()=>{
+    g.querySelector('.cg-del').onclick=()=>{
       customOpen.delete(c.id); customs.splice(i,1);
       syncCustomSections(); renderCustoms(); renderToggles(); render();
     };
-    g.querySelectorAll('.c-add button').forEach(b=>{ b.onclick=()=>addCustomBlock(c, b.dataset.t); });
-    renderCustomBlocks(c, g.querySelector('.c-blocks'));
+    g.querySelectorAll('.cg-add button').forEach(b=>{ b.onclick=()=>addCustomBlock(c, b.dataset.t); });
+    renderCustomBlocks(c, g.querySelector('.cg-blocks'));
     w.appendChild(g);
   });
 }
@@ -657,6 +670,57 @@ function addCustomBlock(c, t){
   }
   c.blocks.push({t, text:CBLOCK_SEED[t]||''});
   renderCustoms(); render();
+}
+// A table block is still stored as the pipe-per-line text every other table in the document uses,
+// so rendering, drafts and the assistant all keep working unchanged — but it is edited as a grid of
+// cells, which is far clearer than picking through a text box once a table has any size to it.
+const tblText = rows => rows.map(r=>'| '+r.join(' | ')+' |').join('\n');
+function tblGrid(b){
+  let rows=tableRows(b.text);
+  if(!rows.length) rows=[['Column','Column']];
+  const cols=Math.max(...rows.map(r=>r.length));
+  return rows.map(r=>{ const o=r.slice(0,cols); while(o.length<cols) o.push(''); return o; });
+}
+function renderTableGrid(b, w){
+  const rows=tblGrid(b), cols=rows[0].length;
+  const store=()=>{ b.text=tblText(rows); };
+  const redraw=()=>{ store(); renderTableGrid(b, w); render(); };
+  w.innerHTML='';
+  const grid=document.createElement('div'); grid.className='cg-grid';
+  // a remover per column, sitting above the heading it belongs to
+  const gx=document.createElement('div'); gx.className='cg-gx';
+  rows[0].forEach((_,ci)=>{
+    const btn=document.createElement('button');
+    btn.type='button'; btn.className='cg-cx'; btn.textContent='✕'; btn.title='Remove this column';
+    btn.onclick=()=>{ if(cols<=1) return; rows.forEach(r=>r.splice(ci,1)); redraw(); };
+    gx.appendChild(btn);
+  });
+  gx.appendChild(Object.assign(document.createElement('span'),{className:'cg-rx'}));   // spacer over the row ✕
+  grid.appendChild(gx);
+  rows.forEach((r,ri)=>{
+    const d=document.createElement('div'); d.className='cg-gr'+(ri===0?' cg-gh':'');
+    r.forEach((cell,ci)=>{
+      const inp=document.createElement('input');
+      inp.type='text'; inp.value=cell; inp.placeholder = ri===0?'Heading':'';
+      // a cell cannot hold the column separator itself
+      inp.oninput=e=>{ const v=e.target.value.replace(/\|/g,''); if(v!==e.target.value) e.target.value=v;
+                       rows[ri][ci]=v; store(); render(); };
+      d.appendChild(inp);
+    });
+    const x=document.createElement('button');
+    x.type='button'; x.className='cg-rx'; x.textContent='✕';
+    x.title = ri===0?'Remove the heading row':'Remove this row';
+    x.onclick=()=>{ if(rows.length<=1) return; rows.splice(ri,1); redraw(); };
+    d.appendChild(x);
+    grid.appendChild(d);
+  });
+  w.appendChild(grid);
+  const btns=document.createElement('div'); btns.className='cg-gbtn';
+  const mk=(label,fn)=>{ const el=document.createElement('button');
+    el.type='button'; el.className='btn ghost'; el.textContent=label; el.onclick=fn; return el; };
+  btns.appendChild(mk('+ Row',    ()=>{ rows.push(new Array(cols).fill('')); redraw(); }));
+  btns.appendChild(mk('+ Column', ()=>{ rows.forEach(r=>r.push('')); redraw(); }));
+  w.appendChild(btns);
 }
 function renderCustomBlocks(c, w){
   w.innerHTML='';
@@ -688,6 +752,12 @@ function renderCustomBlocks(c, w){
       if(ovl) ovl.onchange=e=>{ b.overlap=e.target.checked; renderCustoms(); render(); };
       const cnr=d.querySelector('.cb-cnr');
       if(cnr) cnr.onchange=e=>{ b.corner=e.target.value; render(); };
+    } else if(b.t==='tbl'){
+      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+        <label class="f" style="margin-bottom:6px;">${CBLOCK.tbl.name}</label>
+        <div class="cb-grid"></div>
+        <p class="hint" style="margin:7px 0 0;">${CBLOCK.tbl.hint}</p>`;
+      renderTableGrid(b, d.querySelector('.cb-grid'));
     } else {
       const meta=CBLOCK[b.t]||CBLOCK.p;
       d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
