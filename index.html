@@ -794,7 +794,10 @@ function cblockTableHTML(b){
   const rows=tblGrid(b);
   if(!rows.length) return '';
   const head=rows[0], body=rows.slice(1);
-  const cells=r=>r.slice(1).map(c=>`<td class="c">${cellDisplay(parseCell(c))}</td>`).join('');
+  // a negative amount is a saving or a credit, so it gets the green the discount rows use
+  const cell=raw=>{ const v=parseCell(raw);
+    return (isNum(v) && +v<0) ? `<span class="save">${gbpSigned(+v)}</span>` : cellDisplay(v); };
+  const cells=r=>r.slice(1).map(c=>`<td class="c">${cell(c)}</td>`).join('');
   const thead=`<thead><tr><th class="rh">${(head[0]||'').trim()?esc(head[0]):'&nbsp;'}</th>`
     + head.slice(1).map(h=>`<th class="c">${esc(h)}</th>`).join('')+`</tr></thead>`;
   const trs=body.map(r=>`<tr><th class="rh">${esc(r[0]||'')}</th>${cells(r)}</tr>`).join('');
@@ -803,8 +806,9 @@ function cblockTableHTML(b){
     // the total is the column's own numbers added up; ticks, counts and free text aren't money
     const sums=head.slice(1).map((_,i)=>body.reduce((s,r)=>{
       const v=parseCell(r[i+1]); return s+(isNum(v)?+v:0); },0));
+    // the total bar keeps its own white-on-blue: the green would be unreadable against it
     total=`<tr class="total"><td>${esc(b.totLabel||'Total')}</td>`
-      + sums.map(s=>`<td class="c">${gbp(s)}</td>`).join('')+`</tr>`;
+      + sums.map(s=>`<td class="c">${gbpSigned(s)}</td>`).join('')+`</tr>`;
   }
   return `<table class="price${b.eq===false?'':' eqcols'}">${thead}<tbody>${trs}${total}</tbody></table>`;
 }
@@ -1297,6 +1301,8 @@ function refreshCover(){ applyDuotone(coverIsDefault?COVER_DEFAULT:coverSrc, out
 const val=id=>document.getElementById(id).value;
 const num=id=>parseFloat(document.getElementById(id).value)||0;
 const gbp=n=>'£'+Math.round(n).toLocaleString('en-GB');
+// a negative amount reads as "−£500", the way the discount rows write it — never "£-500"
+const gbpSigned=n=>n<0 ? '−'+gbp(Math.abs(n)) : gbp(n);
 // the pricing tables' bottom row is editable; an empty box falls back to the default rather
 // than printing a blank total row (which reads as a mistake on a sent proposal)
 const totLabel=id=>val(id).trim()||'Total Investment';
