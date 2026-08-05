@@ -64,7 +64,6 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 /* the row of "+ Paragraph / + Table / ..." buttons on a bespoke section — panel furniture only */
 .c-add{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
 .c-add .btn{width:auto;flex:1 1 auto;margin:0;padding:7px 10px;font-size:12px;}
-.customsec .customsec{background:var(--panel);margin-bottom:8px;}
 .draft{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;margin-bottom:8px;font-size:12.5px;}
 .draft.active{border-color:var(--blue);}
 .draft .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
@@ -282,9 +281,12 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <div id="sec-toggles"></div>
       <p class="hint">Drag to reorder. Tick “New page” to start a section on a fresh page. For a one-off, untick Monthly Retainer Options and tick Project Quote. Add a bespoke section for anything new.</p>
       <button class="btn ghost" id="add-custom">+ Add bespoke section</button>
-      <div id="custom-list" style="margin-top:10px;"></div>
-      <p class="hint">A bespoke section appears in the list above like any other — tick it, drag it anywhere, give it a page break. Build it from paragraphs, sub-headings, bullets, tables, a callout box and photos, and drag the blocks to reorder them.</p>
+      <p class="hint">A bespoke section appears in the list above like any other — tick it, drag it anywhere, give it a page break. Its contents are edited in its own panel below.</p>
     </div>
+
+    <!-- one collapsible panel per bespoke section, kept out of the tick list so what a section
+         contains stays separate from whether it is included -->
+    <div id="custom-groups"></div>
 
     <div class="grp">
       <h4>Intro copy (editable)</h4>
@@ -599,26 +601,49 @@ function syncCustomSections(){
     else { SECTIONS.push({id:c.id, name, on:true, custom:true}); if(!order.includes(c.id)) order.push(c.id); }
   });
 }
+const customOpen = new Set();   // which bespoke panels are expanded, kept across re-renders
 document.getElementById('add-custom').onclick=()=>{
-  customs.push({id:'c'+uid(), title:'BESPOKE SECTION',
-    blocks:[{t:'p', text:'Add your bespoke content here — it inherits the same on-brand styling automatically.'}]});
+  const c={id:'c'+uid(), title:'BESPOKE SECTION',
+    blocks:[{t:'p', text:'Add your bespoke content here — it inherits the same on-brand styling automatically.'}]};
+  customs.push(c); customOpen.add(c.id);   // open the new one, it is what the user wants next
   syncCustomSections(); renderCustoms(); renderToggles(); render();
 };
+// Each bespoke section gets its own collapsible panel, the same furniture as Portfolio or Next
+// Steps. Its contents belong there rather than in the tick list, which is only about what the
+// proposal includes and in what order.
 function renderCustoms(){
-  const w=document.getElementById('custom-list'); if(!w) return; w.innerHTML='';
+  const w=document.getElementById('custom-groups'); if(!w) return; w.innerHTML='';
   customs.forEach((c,i)=>{
-    const d=document.createElement('div'); d.className='customsec';
-    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
-      <label class="f">Section title<input type="text" class="c-title" value="${(c.title||'').replace(/"/g,'&quot;')}"></label>
-      <div class="c-blocks"></div>
-      <div class="c-add">${Object.keys(CBLOCK).map(t=>`<button class="btn ghost" data-t="${t}">+ ${CBLOCK[t].name}</button>`).join('')}</div>`;
-    d.querySelector('.x').onclick=()=>{ customs.splice(i,1); syncCustomSections(); renderCustoms(); renderToggles(); render(); };
-    d.querySelector('.c-title').oninput=e=>{ c.title=e.target.value; syncCustomSections(); renderToggles(); render(); };
-    d.querySelectorAll('.c-add button').forEach(b=>{ b.onclick=()=>addCustomBlock(c, b.dataset.t); });
-    renderCustomBlocks(c, d.querySelector('.c-blocks'));
-    w.appendChild(d);
+    const g=document.createElement('div');
+    g.className='grp collapsible'+(customOpen.has(c.id)?' open':'');
+    g.innerHTML=`<h4><span class="cg-name"></span><span class="chev">▶</span></h4>
+      <div class="grp-body">
+        <label class="f">Section title<input type="text" class="c-title"></label>
+        <div class="c-blocks"></div>
+        <div class="c-add">${Object.keys(CBLOCK).map(t=>`<button class="btn ghost" data-t="${t}">+ ${CBLOCK[t].name}</button>`).join('')}</div>
+        <button class="btn ghost c-del">Remove this section</button>
+      </div>`;
+    const name=g.querySelector('.cg-name'), ti=g.querySelector('.c-title');
+    name.textContent=(c.title||'').trim()||'Bespoke section';
+    ti.value=c.title||'';
+    g.querySelector('h4').onclick=()=>{
+      g.classList.toggle('open');
+      g.classList.contains('open') ? customOpen.add(c.id) : customOpen.delete(c.id);
+    };
+    // retitling must not rebuild this panel — that would drop the field's focus mid-word
+    ti.oninput=e=>{
+      c.title=e.target.value;
+      name.textContent=(c.title||'').trim()||'Bespoke section';
+      syncCustomSections(); renderToggles(); render();
+    };
+    g.querySelector('.c-del').onclick=()=>{
+      customOpen.delete(c.id); customs.splice(i,1);
+      syncCustomSections(); renderCustoms(); renderToggles(); render();
+    };
+    g.querySelectorAll('.c-add button').forEach(b=>{ b.onclick=()=>addCustomBlock(c, b.dataset.t); });
+    renderCustomBlocks(c, g.querySelector('.c-blocks'));
+    w.appendChild(g);
   });
-  makeDraggable(w, customs, ()=>{ renderCustoms(); });
 }
 function addCustomBlock(c, t){
   c.blocks=c.blocks||[];
