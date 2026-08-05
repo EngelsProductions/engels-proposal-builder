@@ -77,11 +77,15 @@ label.f input:focus,label.f textarea:focus,label.f select:focus,.cg-gr input:foc
 .cg-cx{flex:1 1 0;}
 .cg-cx:hover:not(:disabled),.cg-rx:hover:not(:disabled){color:var(--blue);}
 .cg-cx:disabled,.cg-rx:disabled{opacity:.22;cursor:default;}
-/* the per-row controls sit in a fixed strip so the cells above and below still line up. They
-   stretch to the row's height — at their natural size they were an 11px-tall target. */
-.cg-rc{flex:0 0 53px;display:flex;gap:1px;justify-content:flex-end;align-self:stretch;}
-.cg-rc .cg-rx{height:auto;align-self:stretch;font-size:9px;}
-.cg-rc .cg-rx.del{font-size:11px;}
+/* the grip and the remove button sit in fixed strips at either end, and the column removers above
+   carry matching spacers, so every cell still lines up with its own column */
+.cg-rc{flex:0 0 17px;display:flex;justify-content:flex-end;align-self:stretch;}
+.cg-rc .cg-rx{height:auto;align-self:stretch;}
+.cg-gp{flex:0 0 14px;width:14px;align-self:stretch;display:flex;align-items:center;justify-content:center;
+  color:#5b6398;cursor:grab;font-size:11px;user-select:none;}
+.cg-gp:active{cursor:grabbing;}
+.cg-gr.dragging{opacity:.4;}
+.cg-gr.over{outline:1px solid var(--blue);outline-offset:1px;border-radius:6px;}
 .cg-gx .cg-cx{padding:3px 0;}
 .cg-grid{display:flex;flex-direction:column;gap:5px;}
 .cg-gbtn{display:flex;gap:6px;margin-top:7px;}
@@ -708,10 +712,34 @@ function renderTableGrid(b, w){
     if(!btn.disabled) btn.onclick=()=>{ rows.forEach(r=>r.splice(ci,1)); redraw(); };
     gx.appendChild(btn);
   });
-  gx.appendChild(Object.assign(document.createElement('span'),{className:'cg-rc'}));   // spacer over the row controls
+  gx.appendChild(Object.assign(document.createElement('span'),{className:'cg-rc'}));   // spacer over the row ✕
+  gx.insertBefore(Object.assign(document.createElement('span'),{className:'cg-gp'}), gx.firstChild);  // and over the grip
   grid.appendChild(gx);
+  let from=null;   // the row being dragged
   rows.forEach((r,ri)=>{
     const d=document.createElement('div'); d.className='cg-gr'+(ri===0?' cg-gh':'');
+    // the heading row gets a plain spacer instead of a grip: the top row is the heading by
+    // definition, so it neither drags nor accepts a row dropped onto it
+    if(ri===0) d.appendChild(Object.assign(document.createElement('span'),{className:'cg-gp'}));
+    else{
+      const gp=document.createElement('span');
+      gp.className='cg-gp'; gp.textContent='⠿'; gp.title='Drag to reorder'; gp.draggable=true;
+      gp.ondragstart=ev=>{
+        from=ri; d.classList.add('dragging');
+        ev.dataTransfer.effectAllowed='move';
+        try{ ev.dataTransfer.setData('text',''); ev.dataTransfer.setDragImage(d,12,12); }catch(_){}
+      };
+      gp.ondragend=()=>{ from=null;
+        [...grid.children].forEach(c=>c.classList.remove('dragging','over')); };
+      d.appendChild(gp);
+      d.ondragover=ev=>{ if(from===null||from===ri) return; ev.preventDefault(); d.classList.add('over'); };
+      d.ondragleave=()=>d.classList.remove('over');
+      d.ondrop=ev=>{
+        ev.preventDefault(); d.classList.remove('over');
+        if(from===null||from===ri) return;
+        const [m]=rows.splice(from,1); rows.splice(ri,0,m); from=null; redraw();
+      };
+    }
     r.forEach((cell,ci)=>{
       const inp=document.createElement('input');
       inp.type='text'; inp.value=cell; inp.placeholder = ri===0?'Heading':'';
@@ -720,20 +748,13 @@ function renderTableGrid(b, w){
                        rows[ri][ci]=v; store(); render(); };
       d.appendChild(inp);
     });
-    // move up / move down / remove. The heading row stays put — the top row is the heading by
-    // definition — so a body row can never be pushed above it.
     const rc=document.createElement('div'); rc.className='cg-rc';
-    const ctrl=(txt,title,enabled,fn,cls)=>{
-      const el=document.createElement('button');
-      el.type='button'; el.className='cg-rx'+(cls?' '+cls:''); el.textContent=txt; el.title=title;
-      el.disabled=!enabled; if(enabled) el.onclick=fn;
-      return el;
-    };
-    const swap=(a,z)=>{ const t=rows[a]; rows[a]=rows[z]; rows[z]=t; redraw(); };
-    rc.appendChild(ctrl('▲','Move this row up',   ri>1,               ()=>swap(ri,ri-1)));
-    rc.appendChild(ctrl('▼','Move this row down', ri>0&&ri<rows.length-1, ()=>swap(ri,ri+1)));
-    rc.appendChild(ctrl('✕', ri===0?'Remove the heading row':'Remove this row',
-      rows.length>1, ()=>{ rows.splice(ri,1); redraw(); }, 'del'));
+    const x=document.createElement('button');
+    x.type='button'; x.className='cg-rx'; x.textContent='✕';
+    x.title = ri===0?'Remove the heading row':'Remove this row';
+    x.disabled = rows.length<=1;
+    if(!x.disabled) x.onclick=()=>{ rows.splice(ri,1); redraw(); };
+    rc.appendChild(x);
     d.appendChild(rc);
     grid.appendChild(d);
   });
