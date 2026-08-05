@@ -587,11 +587,13 @@ const CBLOCK = {
   p:     {name:'Paragraphs',  hint:'A blank line starts a new paragraph.'},
   sub:   {name:'Sub-heading', hint:'One short line.'},
   bul:   {name:'Bullets',     hint:'One bullet per line.'},
-  tbl:   {name:'Table',       hint:'The top row is the heading. Columns of numbers align right automatically.'},
+  tbl:   {name:'Table',       hint:'Top row is the heading, first column the row labels. Type a £ amount, “yes” for a ✓, short text, or leave blank for a dash. Prefix a number with # for a plain count — 3 shows as £3, #3 shows as 3.'},
   call:  {name:'Callout box', hint:'One point per line, written as “Label: text”.'},
   photo: {name:'Photo',       hint:''}
 };
-const CBLOCK_SEED = {p:'', sub:'', bul:'', tbl:'| Column | Column |\n| Value | Value |', call:'Label: the point you want to make.'};
+const CBLOCK_SEED = {p:'', sub:'', bul:'',
+  tbl:'| Description | Option A | Option B |\n| Item | 350 | 500 |',
+  call:'Label: the point you want to make.'};
 const customById = id => customs.find(c=>c.id===id);
 // drafts saved before bespoke sections held blocks are {title, body}: the body becomes the first
 // paragraph block, and the section gains the id it now needs to sit in the running order
@@ -759,8 +761,18 @@ function renderCustomBlocks(c, w){
       d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
         <label class="f" style="margin-bottom:6px;">${CBLOCK.tbl.name}</label>
         <div class="cb-grid"></div>
-        <p class="hint" style="margin:7px 0 0;">${CBLOCK.tbl.hint}</p>`;
+        <p class="hint" style="margin:7px 0 0;">${CBLOCK.tbl.hint}</p>
+        <label class="toggle" style="margin:9px 0 0;"><input type="checkbox" class="cb-eq"${b.eq===false?'':' checked'}><span>Keep columns the same width</span></label>
+        <label class="toggle" style="margin:6px 0 0;"><input type="checkbox" class="cb-tot"${b.tot?' checked':''}><span>Add a total row</span></label>
+        <label class="f cb-totlbl-wrap" style="margin:8px 0 0;${b.tot?'':'display:none;'}">Total row label<input type="text" class="cb-totlbl" value="${(b.totLabel||'Total').replace(/"/g,'&quot;')}"></label>`;
       renderTableGrid(b, d.querySelector('.cb-grid'));
+      d.querySelector('.cb-eq').onchange=e=>{ b.eq=e.target.checked; render(); };
+      d.querySelector('.cb-tot').onchange=e=>{
+        b.tot=e.target.checked;
+        d.querySelector('.cb-totlbl-wrap').style.display=b.tot?'':'none';
+        render();
+      };
+      d.querySelector('.cb-totlbl').oninput=e=>{ b.totLabel=e.target.value; render(); };
     } else {
       const meta=CBLOCK[b.t]||CBLOCK.p;
       d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
@@ -774,6 +786,28 @@ function renderCustomBlocks(c, w){
   makeDraggable(w, c.blocks, ()=>renderCustoms());
 }
 // ---- bespoke sections rendered into the proposal ----
+// A table in a bespoke section is the Quote Options table, with the same behaviour throughout: the
+// first column is the row label and stays flexible, every column after it shares the remaining width
+// equally, and cells are read exactly as they are there — a number becomes £, "yes" becomes a tick,
+// "#3" a plain count, blank a dash, anything else prints as typed.
+function cblockTableHTML(b){
+  const rows=tblGrid(b);
+  if(!rows.length) return '';
+  const head=rows[0], body=rows.slice(1);
+  const cells=r=>r.slice(1).map(c=>`<td class="c">${cellDisplay(parseCell(c))}</td>`).join('');
+  const thead=`<thead><tr><th class="rh">${(head[0]||'').trim()?esc(head[0]):'&nbsp;'}</th>`
+    + head.slice(1).map(h=>`<th class="c">${esc(h)}</th>`).join('')+`</tr></thead>`;
+  const trs=body.map(r=>`<tr><th class="rh">${esc(r[0]||'')}</th>${cells(r)}</tr>`).join('');
+  let total='';
+  if(b.tot){
+    // the total is the column's own numbers added up; ticks, counts and free text aren't money
+    const sums=head.slice(1).map((_,i)=>body.reduce((s,r)=>{
+      const v=parseCell(r[i+1]); return s+(isNum(v)?+v:0); },0));
+    total=`<tr class="total"><td>${esc(b.totLabel||'Total')}</td>`
+      + sums.map(s=>`<td class="c">${gbp(s)}</td>`).join('')+`</tr>`;
+  }
+  return `<table class="price${b.eq===false?'':' eqcols'}">${thead}<tbody>${trs}${total}</tbody></table>`;
+}
 function cblockHTML(b){
   switch(b.t){
     case 'sub': return (b.text||'').trim()?`<h3 class="sub">${esc(b.text)}</h3>`:'';
@@ -781,7 +815,7 @@ function cblockHTML(b){
       const items=(b.text||'').split('\n').map(s=>s.replace(/^\s*[-•]\s*/,'').trim()).filter(Boolean);
       return items.length?`<div class="blts">${items.map(t=>`<p>${esc(t)}</p>`).join('')}</div>`:'';
     }
-    case 'tbl': { const rows=tableRows(b.text); return rows.length?tableHtml(rows):''; }
+    case 'tbl': return cblockTableHTML(b);
     case 'call': {
       const pts=(b.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
       if(!pts.length) return '';
