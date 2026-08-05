@@ -26,6 +26,8 @@ html,body{margin:0;height:100%;font-family:"Poppins",system-ui,sans-serif;backgr
   background:transparent;color:#aab6e6;font-size:15px;line-height:1;cursor:pointer;font-family:inherit;}
 .panel-head .hist button:hover:not(:disabled){background:rgba(255,255,255,.07);color:#fff;}
 .panel-head .hist button:disabled{opacity:.3;cursor:default;}
+.panel-head .hist button.spell{width:auto;padding:0 9px;font-size:12.5px;font-weight:600;letter-spacing:.02em;}
+.panel-head .hist button.spell.busy{color:var(--blue);border-color:var(--blue);}
 .panel-head .ttl{font-weight:600;font-size:13px;letter-spacing:.03em;}
 .panel-head .ttl span{display:block;font-weight:300;font-size:10px;color:#8fa4d6;letter-spacing:.14em;}
 .grp{padding:16px 20px;border-bottom:1px solid var(--panel-line);}
@@ -259,6 +261,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <img id="ph-logo" alt="Engels"/>
       <div class="ttl">Proposal Builder<span>ENGELS PRODUCTIONS</span></div>
       <div class="hist">
+        <button id="h-spell" class="spell" title="Check the whole proposal for spelling and grammar">Aa</button>
         <button id="h-undo" title="Undo the last change">↶</button>
         <button id="h-redo" title="Redo">↷</button>
       </div>
@@ -2109,6 +2112,7 @@ const AI_APPLY = {
   const fab=document.getElementById('ai-fab'), panel=document.getElementById('ai-panel');
   const input=document.getElementById('ai-input'), send=document.getElementById('ai-send');
   const mic=document.getElementById('ai-mic'), note=document.getElementById('ai-note');
+  const spell=document.getElementById('h-spell');
   const undo=document.getElementById('ai-undo'), redo=document.getElementById('ai-redo');
   const hist=document.getElementById('ai-hist');
 
@@ -2144,16 +2148,27 @@ const AI_APPLY = {
     syncHistory(); say('Change reapplied.');
   };
 
-  async function run(){
+  async function run(opts){
+    const proofread = opts && opts.proofread;
     const instruction=input.value.trim();
-    if(!instruction) return say('Say what you would like changed.','err');
-    fab.classList.add('busy'); send.disabled=true; say('Working…');
+    if(!proofread && !instruction) return say('Say what you would like changed.','err');
+    fab.classList.add('busy'); send.disabled=true;
+    spell.disabled=true; spell.classList.add('busy');
+    say(proofread?'Checking the whole proposal…':'Working…');
     const snapshotBefore=snapshot();
     try{
-      const r=await fetch('/api/assist',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({instruction, state:aiState()})
-      });
+      let r;
+      try{
+        r=await fetch('/api/assist',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(proofread?{mode:'proofread', state:aiState()}
+                                       :{instruction, state:aiState()})
+        });
+      }catch(_){
+        // nothing answered at all — opened as a local file, or offline. "Failed to fetch" on its
+        // own tells the user nothing about why.
+        throw Error('The assistant isn’t available here. It only runs on the deployed site.');
+      }
       const data=await r.json().catch(()=>({}));
       // 404 means there's no function answering — running from the local dev server, or not deployed yet
       if(r.status===404) throw Error('The assistant isn’t available here. It only runs on the deployed site.');
@@ -2171,7 +2186,8 @@ const AI_APPLY = {
         if(past.length>MAX_HISTORY) past.shift();
         future.length=0;               // a new change abandons anything that was redoable
         syncHistory();
-        render(); input.value='';
+        render();
+        if(!proofread) input.value='';   // a proofread never came from the box, so don't clear it
       }
       // a change can land in a switched-off section and be invisible — say so rather than
       // reporting success against something the user cannot see
@@ -2184,17 +2200,24 @@ const AI_APPLY = {
         : '';
 
       const summary=(data.message||'').trim();
-      if(!done.length && !failed.length) say(summary||'Nothing was changed.');
+      if(!done.length && !failed.length)
+        say(summary || (proofread?'No spelling or grammar mistakes found.':'Nothing was changed.'),
+            proofread?'ok':'');
       else say([summary || (done.length+' change'+(done.length>1?'s':'')+' applied.'),
-                failed.join(' '), warn].filter(Boolean).join(' '),
+                failed.join(' '), warn,
+                proofread&&done.length?'Undo puts all of it back.':''].filter(Boolean).join(' '),
                failed.length?'err':'ok');
     }catch(e){
       say(e.message||'Could not reach the assistant.','err');
     }finally{
       fab.classList.remove('busy'); send.disabled=false;
+      spell.disabled=false; spell.classList.remove('busy');
     }
   }
-  send.onclick=run;
+  send.onclick=()=>run();
+  // the spellcheck button sits in the panel header; its results are reported in this panel, so
+  // open it rather than leaving the outcome somewhere the user isn't looking
+  spell.onclick=()=>{ openPanel(true); run({proofread:true}); };
   input.onkeydown=e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='Enter') run(); };
 
   // dictation is the browser's own speech recognition — the audio never leaves this machine,

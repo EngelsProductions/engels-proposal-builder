@@ -401,6 +401,29 @@ How to work:
 - Alongside your tool calls, write one short sentence for the user saying what you changed. No preamble,
   no restating the request, no bulleted summary of your own work.`;
 
+// The spellcheck button runs the same tools, under instructions that only allow corrections.
+// It is deliberately narrow: a proposal that has been written carefully must come back reading
+// exactly as it did, minus the mistakes.
+const PROOFREAD = `${SYSTEM}
+
+THIS TURN IS A PROOFREAD, NOT A REWRITE. Read the proposal's copy and correct only:
+- misspellings and typos, including American spellings that should be British (optimize → optimise)
+- grammar: subject/verb agreement, tense, plurals, a/an, missing or duplicated words
+- punctuation: missing full stops, stray or missing commas, unbalanced brackets and quotes, spacing
+
+Leave everything else exactly as it is. Do not improve phrasing, do not shorten or lengthen, and do
+not adjust the tone of anything already correct. Never alter a number, price, date, percentage,
+email address, phone number, URL, or the name of a person or company — a name that looks misspelled
+to you is not yours to correct. Do not add or remove sections, list entries, table rows or photos,
+and do not toggle anything on or off.
+
+Call the matching update tool once for each field or entry that genuinely needs correcting, sending
+its full corrected text. Call no tool for anything already correct. If the whole proposal is clean,
+call no tools at all.
+
+Then list what you changed, one correction per line, as: was → now. Keep each line to the words that
+actually changed, not the whole sentence. If you changed nothing, say so in one short sentence.`;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Use POST." });
@@ -411,8 +434,9 @@ export default async function handler(req, res) {
     });
   }
 
-  const { instruction, state } = req.body || {};
-  if (typeof instruction !== "string" || !instruction.trim()) {
+  const { instruction, state, mode } = req.body || {};
+  const proofread = mode === "proofread";
+  if (!proofread && (typeof instruction !== "string" || !instruction.trim())) {
     return res.status(400).json({ error: "No instruction given." });
   }
 
@@ -424,7 +448,7 @@ export default async function handler(req, res) {
       // into its visible text instead of calling the tool, which would silently do nothing
       thinking: { type: "adaptive" },
       output_config: { effort: "medium" },
-      system: SYSTEM,
+      system: proofread ? PROOFREAD : SYSTEM,
       tools: TOOLS,
       messages: [
         {
@@ -432,7 +456,9 @@ export default async function handler(req, res) {
           content:
             "Here is the proposal as it currently stands:\n\n" +
             "```json\n" + JSON.stringify(state, null, 1) + "\n```\n\n" +
-            "Do this:\n" + instruction.trim(),
+            (proofread
+              ? "Proofread it and correct any spelling, grammar or punctuation mistakes."
+              : "Do this:\n" + instruction.trim()),
         },
       ],
     });
