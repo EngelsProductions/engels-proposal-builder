@@ -61,6 +61,10 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .customsec .grip{float:left;color:#5b6398;cursor:grab;font-size:13px;margin-right:8px;user-select:none;}
 .customsec.dragging{opacity:.45;}
 .customsec.over{border-color:var(--blue);}
+/* the row of "+ Paragraph / + Table / ..." buttons on a bespoke section — panel furniture only */
+.c-add{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
+.c-add .btn{width:auto;flex:1 1 auto;margin:0;padding:7px 10px;font-size:12px;}
+.customsec .customsec{background:var(--panel);margin-bottom:8px;}
 .draft{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--panel-2);border:1px solid var(--panel-line);border-radius:8px;margin-bottom:8px;font-size:12.5px;}
 .draft.active{border-color:var(--blue);}
 .draft .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
@@ -109,7 +113,7 @@ label.f input:focus,label.f textarea:focus,label.f select:focus{outline:none;bor
 .bar{background:var(--navy);color:#fff;font-weight:600;font-size:12.5pt;letter-spacing:.05em;padding:8pt 13pt;border-radius:3px;margin:0 0 13pt;}
 .bar.mt{margin-top:18pt;}
 .lead{color:var(--navy);font-weight:500;}
-.callout{background:var(--box);color:#fff;border-radius:8px;padding:13pt 16pt 5pt;margin:6pt 0 12pt;}
+.callout{background:var(--box);color:#fff;border-radius:8px;padding:13pt 16pt 5pt;margin:6pt 0 12pt;display:flow-root;}
 .callout p{color:#fff;font-size:10pt;line-height:1.6;margin:0 0 9pt;}
 .callout .k{font-weight:700;text-decoration:underline;text-decoration-color:rgba(255,255,255,.5);text-underline-offset:2px;}
 /* about photos — a white rounded frame with a mirrored reflection under it, matching the
@@ -163,7 +167,10 @@ table.rates td.n,table.rates th.n,table.rates th.r{text-align:right;}
    the paragraphs around it, hung off a blue marker so wrapped lines line up under the text rather
    than under the bullet. Must sit after ".pg p" — equal specificity, so source order wins. */
 .blts{margin:0 0 9pt;}
-.blts p{margin:0 0 4pt;padding-left:13pt;position:relative;}
+/* flow-root so a bullet sitting beside a floated photo keeps its box out of the float: the marker is
+   positioned against that box, and without this it strands itself in the float's gutter while the
+   text wraps away to the right. A bullet clear of the float is unaffected. */
+.blts p{margin:0 0 4pt;padding-left:13pt;position:relative;display:flow-root;}
 .blts p:last-child{margin:0;}
 .blts p::before{content:"•";position:absolute;left:2pt;color:var(--blue);font-weight:700;}
 h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
@@ -276,6 +283,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <p class="hint">Drag to reorder. Tick “New page” to start a section on a fresh page. For a one-off, untick Monthly Retainer Options and tick Project Quote. Add a bespoke section for anything new.</p>
       <button class="btn ghost" id="add-custom">+ Add bespoke section</button>
       <div id="custom-list" style="margin-top:10px;"></div>
+      <p class="hint">A bespoke section appears in the list above like any other — tick it, drag it anywhere, give it a page break. Build it from paragraphs, sub-headings, bullets, tables, a callout box and photos, and drag the blocks to reorder them.</p>
     </div>
 
     <div class="grp">
@@ -551,53 +559,248 @@ function renderToggles(){
   });
 }
 
-// ---- custom sections ----
+// ---- bespoke sections ----
+// A bespoke section behaves exactly like a built-in one: it has its own entry in SECTIONS, so it
+// ticks on and off, drags anywhere in the running order, takes a page break and appears in Contents.
+// Its content is a stack of blocks, and every block is a component that already exists elsewhere in
+// the document — paragraphs, the sub-heading, the bullet list, the day-rates table, the blue callout
+// box and the About photo frame. Nothing here introduces a new design.
+const CBLOCK = {
+  p:     {name:'Paragraphs',  hint:'A blank line starts a new paragraph.'},
+  sub:   {name:'Sub-heading', hint:'One short line.'},
+  bul:   {name:'Bullets',     hint:'One bullet per line.'},
+  tbl:   {name:'Table',       hint:'One row per line, as | Videos | Rate | Total |. The first row is the heading; number columns align right.'},
+  call:  {name:'Callout box', hint:'One point per line, written as “Label: text”.'},
+  photo: {name:'Photo',       hint:''}
+};
+const CBLOCK_SEED = {p:'', sub:'', bul:'', tbl:'| Column | Column |\n| Value | Value |', call:'Label: the point you want to make.'};
+const customById = id => customs.find(c=>c.id===id);
+// drafts saved before bespoke sections held blocks are {title, body}: the body becomes the first
+// paragraph block, and the section gains the id it now needs to sit in the running order
+function migrateCustom(c){
+  c=c||{};
+  if(!c.id) c.id='c'+uid();
+  if(!Array.isArray(c.blocks)) c.blocks = (c.body||'').trim() ? [{t:'p', text:c.body}] : [];
+  delete c.body;
+  return c;
+}
+// keep SECTIONS and the running order in step with the bespoke sections that exist
+function syncCustomSections(){
+  for(let i=SECTIONS.length-1;i>=0;i--){
+    const s=SECTIONS[i];
+    if(!s.custom || customById(s.id)) continue;
+    const at=order.indexOf(s.id); if(at>=0) order.splice(at,1);
+    SECTIONS.splice(i,1);
+  }
+  customs.forEach(c=>{
+    const name=(c.title||'').trim()||'Bespoke section';
+    const s=SECTIONS.find(x=>x.id===c.id);
+    if(s) s.name=name;
+    else { SECTIONS.push({id:c.id, name, on:true, custom:true}); if(!order.includes(c.id)) order.push(c.id); }
+  });
+}
 document.getElementById('add-custom').onclick=()=>{
-  customs.push({title:'BESPOKE SECTION',body:'Add your bespoke content here — it inherits the same on-brand styling automatically.'});
-  renderCustoms();render();
+  customs.push({id:'c'+uid(), title:'BESPOKE SECTION',
+    blocks:[{t:'p', text:'Add your bespoke content here — it inherits the same on-brand styling automatically.'}]});
+  syncCustomSections(); renderCustoms(); renderToggles(); render();
 };
 function renderCustoms(){
-  const w=document.getElementById('custom-list'); w.innerHTML='';
+  const w=document.getElementById('custom-list'); if(!w) return; w.innerHTML='';
   customs.forEach((c,i)=>{
     const d=document.createElement('div'); d.className='customsec';
-    d.innerHTML=`<span class="x" title="remove">✕</span>
-      <label class="f">Section title<input type="text" value="${c.title.replace(/"/g,'&quot;')}"></label>
-      <label class="f">Content<textarea>${c.body}</textarea></label>`;
-    d.querySelector('.x').onclick=()=>{customs.splice(i,1);renderCustoms();render();};
-    const [ti,ta]=d.querySelectorAll('input,textarea');
-    ti.oninput=e=>{c.title=e.target.value;render();};
-    ta.oninput=e=>{c.body=e.target.value;render();};
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+      <label class="f">Section title<input type="text" class="c-title" value="${(c.title||'').replace(/"/g,'&quot;')}"></label>
+      <div class="c-blocks"></div>
+      <div class="c-add">${Object.keys(CBLOCK).map(t=>`<button class="btn ghost" data-t="${t}">+ ${CBLOCK[t].name}</button>`).join('')}</div>`;
+    d.querySelector('.x').onclick=()=>{ customs.splice(i,1); syncCustomSections(); renderCustoms(); renderToggles(); render(); };
+    d.querySelector('.c-title').oninput=e=>{ c.title=e.target.value; syncCustomSections(); renderToggles(); render(); };
+    d.querySelectorAll('.c-add button').forEach(b=>{ b.onclick=()=>addCustomBlock(c, b.dataset.t); });
+    renderCustomBlocks(c, d.querySelector('.c-blocks'));
     w.appendChild(d);
   });
+  makeDraggable(w, customs, ()=>{ renderCustoms(); });
+}
+function addCustomBlock(c, t){
+  c.blocks=c.blocks||[];
+  if(t==='photo'){
+    pickPhotos(list=>{
+      const base=c.blocks.filter(b=>b.t==='photo').length;
+      list.forEach((s,i)=>c.blocks.push({t:'photo', src:s.src, ar:s.ar, side:(base+i)%2?'r':'l', size:'m'}));
+      renderCustoms(); render();
+    });
+    return;
+  }
+  c.blocks.push({t, text:CBLOCK_SEED[t]||''});
+  renderCustoms(); render();
+}
+function renderCustomBlocks(c, w){
+  w.innerHTML='';
+  (c.blocks||[]).forEach((b,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    const prevIsPhoto = i>0 && c.blocks[i-1].t==='photo';
+    if(b.t==='photo'){
+      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+        <img src="${b.src}" style="width:100%;height:64px;object-fit:cover;border-radius:5px;display:block;margin-bottom:7px;">
+        <div class="row">
+          <label class="f">Side<select class="cb-side">
+            <option value="l"${b.side==='l'?' selected':''}>Left</option>
+            <option value="r"${b.side==='r'?' selected':''}>Right</option>
+          </select></label>
+          <label class="f">Size<select class="cb-size">
+            <option value="s"${b.size==='s'?' selected':''}>Small</option>
+            <option value="m"${b.size==='m'?' selected':''}>Medium</option>
+            <option value="l"${b.size==='l'?' selected':''}>Large</option>
+          </select></label>
+        </div>` + (prevIsPhoto ? `
+        <label class="toggle" style="margin:8px 0 0;"><input type="checkbox" class="cb-ovl"${b.overlap?' checked':''}><span>Lay over the photo above</span></label>
+        <label class="f cb-cnr-wrap" style="margin-top:7px;${b.overlap?'':'display:none;'}">Corner<select class="cb-cnr">
+          <option value="br"${b.corner!=='bl'?' selected':''}>Bottom right</option>
+          <option value="bl"${b.corner==='bl'?' selected':''}>Bottom left</option>
+        </select></label>` : '');
+      d.querySelector('.cb-side').onchange=e=>{b.side=e.target.value;render();};
+      d.querySelector('.cb-size').onchange=e=>{b.size=e.target.value;render();};
+      const ovl=d.querySelector('.cb-ovl');
+      if(ovl) ovl.onchange=e=>{ b.overlap=e.target.checked; renderCustoms(); render(); };
+      const cnr=d.querySelector('.cb-cnr');
+      if(cnr) cnr.onchange=e=>{ b.corner=e.target.value; render(); };
+    } else {
+      const meta=CBLOCK[b.t]||CBLOCK.p;
+      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+        <label class="f">${meta.name}<textarea class="cb-t" ${b.t==='sub'?'rows="1"':''}>${b.text||''}</textarea></label>
+        ${meta.hint?`<p class="hint" style="margin:0;">${meta.hint}</p>`:''}`;
+      d.querySelector('.cb-t').oninput=e=>{ b.text=e.target.value; render(); };
+    }
+    d.querySelector('.x').onclick=()=>{ c.blocks.splice(i,1); renderCustoms(); render(); };
+    w.appendChild(d);
+  });
+  makeDraggable(w, c.blocks, ()=>renderCustoms());
+}
+// ---- bespoke sections rendered into the proposal ----
+function cblockHTML(b){
+  switch(b.t){
+    case 'sub': return (b.text||'').trim()?`<h3 class="sub">${esc(b.text)}</h3>`:'';
+    case 'bul': {
+      const items=(b.text||'').split('\n').map(s=>s.replace(/^\s*[-•]\s*/,'').trim()).filter(Boolean);
+      return items.length?`<div class="blts">${items.map(t=>`<p>${esc(t)}</p>`).join('')}</div>`:'';
+    }
+    case 'tbl': { const rows=tableRows(b.text); return rows.length?tableHtml(rows):''; }
+    case 'call': {
+      const pts=(b.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      if(!pts.length) return '';
+      return `<div class="callout">${pts.map(t=>{
+        const i=t.indexOf(':');
+        return i>0 ? `<p><span class="k">${esc(t.slice(0,i))}:</span> ${esc(t.slice(i+1).trim())}</p>`
+                   : `<p>${esc(t)}</p>`;
+      }).join('')}</div>`;
+    }
+    default: return (b.text||'').split(/\n\n+/).filter(t=>t.trim()).map(t=>`<p>${esc(t)}</p>`).join('');
+  }
+}
+// Photos float and the copy wraps around them, exactly as in About: a photo opens a chunk and
+// whatever follows flows alongside it until the next photo. A chunk holding a photo gets the .abt
+// wrapper so the float is contained; one without keeps plain markup, so its last paragraph's margin
+// still collapses into the next section bar the way it did before.
+function customChunks(c){
+  const chunks=[]; let cur=null;
+  const start=()=>{ cur={photos:[], html:''}; chunks.push(cur); return cur; };
+  (c.blocks||[]).forEach(b=>{
+    if(b.t==='photo'){
+      if(!b.src) return;
+      if(cur && !cur.html && cur.photos.length && b.overlap) cur.photos.push(b);
+      else start().photos.push(b);
+    } else {
+      const h=cblockHTML(b); if(!h) return;
+      (cur||start()).html+=h;
+    }
+  });
+  return chunks.filter(ch=>ch.photos.length||ch.html).map(ch=>{
+    const inner=(ch.photos.length?photoHTML(ch.photos):'')+ch.html;
+    return ch.photos.length?`<div class="abt">${inner}</div>`:inner;
+  });
+}
+// The assistant works in plain text, never blocks and never markup: the same line conventions used
+// elsewhere in the document are parsed into the block stack on the way in, and read back out on the
+// way to it. Photos and callout boxes have no text form, so an edit from the assistant leaves them
+// untouched rather than destroying work done in the panel.
+function blocksFromText(text){
+  const out=[]; let para=[], bul=[], rows=[];
+  const flushPara=()=>{ const t=para.join('\n').trim(); if(t) out.push({t:'p', text:t}); para=[]; };
+  const flushBul=()=>{ if(bul.length) out.push({t:'bul', text:bul.join('\n')}); bul=[]; };
+  const flushRows=()=>{ if(rows.length) out.push({t:'tbl', text:rows.map(r=>'| '+r.join(' | ')+' |').join('\n')}); rows=[]; };
+  (text||'').split('\n').forEach(line=>{
+    const cells=tableRow(line), b=line.match(/^\s*[-•]\s+(.+)$/), h=line.match(/^\s*##\s+(.+)$/);
+    if(cells!==undefined){ if(cells){ flushPara(); flushBul(); rows.push(cells); } }
+    else if(b){ flushPara(); flushRows(); bul.push(b[1]); }
+    else if(h){ flushPara(); flushBul(); flushRows(); out.push({t:'sub', text:h[1]}); }
+    else { flushBul(); flushRows(); para.push(line); }
+  });
+  flushPara(); flushBul(); flushRows();
+  return out;
+}
+const customText = c => (c.blocks||[]).map(b=>
+    b.t==='photo' ? '[photo]'
+  : b.t==='sub'   ? '## '+(b.text||'')
+  : b.t==='bul'   ? (b.text||'').split('\n').filter(s=>s.trim()).map(s=>'- '+s.trim()).join('\n')
+  : b.t==='call'  ? '[callout box]\n'+(b.text||'')
+  : (b.text||'')
+  ).filter(s=>s.trim()).join('\n\n');
+const CB_KEEP = b => b.t==='photo' || b.t==='call';
+// swap the text blocks for new ones, in the place the old ones sat, leaving photos and callouts be
+function setCustomText(c, text){
+  const blocks=c.blocks||[];
+  const at=blocks.findIndex(b=>!CB_KEEP(b));
+  const kept=blocks.filter(CB_KEEP);
+  const idx = at<0 ? kept.length : blocks.slice(0,at).filter(CB_KEEP).length;
+  kept.splice(idx, 0, ...blocksFromText(text));
+  c.blocks=kept;
+}
+const customBar = c => `<div class="bar mt">${esc((c.title||'').trim()||'Bespoke section')}</div>`;
+const customHTML = c => customBar(c) + customChunks(c).join('');
+// each chunk is its own pagination block, so a long bespoke section flows across pages
+function customBlocks(c){
+  const chunks=customChunks(c);
+  if(!chunks.length) return [{id:c.id, html:customBar(c)}];
+  return chunks.map((html,i)=>({id: i===0?c.id:c.id+'-b'+i, html:(i===0?customBar(c):'')+html}));
 }
 
 // ---- about photos (optional, float alongside the About copy) ----
 const PH_W = {s:32, m:42, l:52};   // float width as a % of the content column
-document.getElementById('i-aboutphoto').onchange=e=>{
-  const files=[...e.target.files]; if(!files.length) return;
-  e.target.value='';
-  // each file decodes at its own pace, so collect into slots and append in the order they were
-  // picked — otherwise a small photo overtakes a large one and the selection comes out shuffled
+// Shared by About and the bespoke sections. Each file decodes at its own pace, so collect into
+// slots and hand them back in the order they were picked — otherwise a small photo overtakes a
+// large one and the selection comes out shuffled.
+function loadPhotoFiles(files, done){
   const slots=new Array(files.length).fill(null);
-  const base=aboutPhotos.length;
   let pending=files.length;
-  const done=()=>{ if(--pending) return;
-    slots.forEach((s,i)=>{ if(s) aboutPhotos.push({src:s.src, side:(base+i)%2?'r':'l', size:'m', ar:s.ar}); });
-    renderAboutPhotos(); render();
-  };
+  const fin=()=>{ if(--pending) return; done(slots.filter(Boolean)); };
   files.forEach((f,i)=>{
     const r=new FileReader();
     // photos live inside the draft in localStorage, so downscale hard — they print at ~85mm wide
     r.onload=()=>downscale(r.result,1400,0.82,out=>{
       // remember the shape so the frame and its reflection keep the photo's own proportions
       const probe=new Image();
-      const add=ar=>{ slots[i]={src:out, ar}; done(); };
+      const add=ar=>{ slots[i]={src:out, ar}; fin(); };
       probe.onload=()=>add(probe.naturalWidth?probe.naturalHeight/probe.naturalWidth:0.666);
       probe.onerror=()=>add(0.666);
       probe.src=out;
     });
-    r.onerror=done;
+    r.onerror=fin;
     r.readAsDataURL(f);
+  });
+}
+// open the file picker without a permanent <input> in the markup, for the bespoke-section blocks
+function pickPhotos(done){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*'; inp.multiple=true;
+  inp.onchange=()=>{ const files=[...inp.files]; if(files.length) loadPhotoFiles(files, done); };
+  inp.click();
+}
+document.getElementById('i-aboutphoto').onchange=e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  e.target.value='';
+  const base=aboutPhotos.length;
+  loadPhotoFiles(files, list=>{
+    list.forEach((s,i)=>aboutPhotos.push({src:s.src, side:(base+i)%2?'r':'l', size:'m', ar:s.ar}));
+    renderAboutPhotos(); render();
   });
 };
 function renderAboutPhotos(){
@@ -639,11 +842,12 @@ function renderAboutPhotos(){
 const PH_OVER_X = 0.35;   // how much of the narrower photo its neighbour's corner covers
 const PH_OVER_Y = 0.28;   // how far up the photo below it rides, as a fraction of that photo's height
 const PH_REFLECT = 0.15;  // a reflection's height, as a fraction of its photo's width
-function aboutClusters(){
+function clusterPhotos(arr){
   const out=[];
-  aboutPhotos.forEach(p=>{ if(out.length && p.overlap) out[out.length-1].push(p); else out.push([p]); });
+  arr.forEach(p=>{ if(out.length && p.overlap) out[out.length-1].push(p); else out.push([p]); });
   return out;
 }
+const aboutClusters = () => clusterPhotos(aboutPhotos);
 // one floated group with its frames and reflections. Each photo keeps its own shape — portrait
 // and landscape sit together as they do in the printed proposals — so the frame and the
 // reflection are both driven by the photo's stored aspect ratio.
@@ -825,6 +1029,16 @@ function renderNoteList(arr, elId, rerender){
 // Consecutive lines of a kind group into one block; every other line stays a paragraph and behaves
 // exactly as it did before. The table is the existing day-rates table, not a new component.
 const NUMERIC=/^[£$€]?\s*-?[\d,]+(\.\d+)?\s*%?$/;
+// "| a | b |" → ['a','b']. undefined if the line isn't a table row at all; null for a markdown
+// separator row (|---|---|), which is easy to type out of habit and is never shown.
+function tableRow(line){
+  const t=(line||'').trim();
+  if(!t.startsWith('|')) return undefined;
+  const cells=t.replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim());
+  return cells.every(c=>/^:?-{2,}:?$/.test(c)) ? null : cells;
+}
+// every row of a whole block of text, for a table typed on its own rather than inside an explanation
+const tableRows = text => (text||'').split('\n').map(tableRow).filter(r=>Array.isArray(r));
 function tableHtml(rows){
   const head=rows[0], body=rows.slice(1);
   // a column is a number column only if every filled cell in it is a number, so headings and
@@ -852,12 +1066,8 @@ function noteBody(text){
   };
   const flushRows=()=>{ if(rows.length) out.push(tableHtml(rows)); rows=[]; };
   (text||'').split('\n').forEach(line=>{
-    const t=line.trim(), bul=line.match(/^\s*[-•]\s+(.+)$/);
-    if(t.startsWith('|')){
-      const cells=t.replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim());
-      // tolerate a markdown separator row (|---|---|) — typed out of habit, never shown
-      if(!cells.every(c=>/^:?-{2,}:?$/.test(c))){ flushPara(); flushBullets(); rows.push(cells); }
-    }
+    const cells=tableRow(line), bul=line.match(/^\s*[-•]\s+(.+)$/);
+    if(cells!==undefined){ if(cells){ flushPara(); flushBullets(); rows.push(cells); } }
     else if(bul){ flushPara(); flushRows(); bullets.push(bul[1]); }
     else { flushBullets(); flushRows(); para.push(line); }
   });
@@ -1009,12 +1219,17 @@ function renderQuoteCalc(){
 
 // ---- section renderers ----
 function secHTML(id){
+  const cu=customById(id); if(cu) return customHTML(cu);
   const c=calc();
   switch(id){
    case 'toc': {
       const entries=[];
-      order.forEach(id=>{ const s=SECTIONS.find(x=>x.id===id); if(s&&s.on&&HEADERS[id]) entries.push({label:HEADERS[id], page:pageOf[id]}); });
-      customs.forEach((cu,idx)=>{ if((cu.title||'').trim()) entries.push({label:cu.title, page:pageOf['custom'+idx]}); });
+      // a bespoke section is listed under its own title, in whatever position it has been dragged to
+      order.forEach(id=>{
+        const s=SECTIONS.find(x=>x.id===id); if(!s||!s.on) return;
+        const label = HEADERS[id] || (s.custom ? s.name : null);
+        if(label) entries.push({label, page:pageOf[id]});
+      });
       const rows = tocTwoCol ? ` style="grid-template-rows:repeat(${Math.ceil(entries.length/2)},auto)"` : '';
       return `<div class="bar">CONTENTS</div>
       <div class="toc${tocTwoCol?' two-col':''}"${rows}>${entries.map(e=>`<div class="toc-row"><span class="toc-lbl">${esc(e.label)}</span><span class="toc-pg">${e.page||''}</span></div>`).join('')}</div>`;
@@ -1222,10 +1437,10 @@ function render(){
       else if(id==='terms'){ termsBlocks().forEach(b=>bl.push(b)); }
       else if(id==='options'){ priceBlocks('options', optionsParts(), pageH).forEach(b=>bl.push(b)); }
       else if(id==='quote'){ priceBlocks('quote', quoteParts(), pageH).forEach(b=>bl.push(b)); }
+      else if(customById(id)){ customBlocks(customById(id)).forEach(b=>bl.push(b)); }
       else bl.push({id, html:secHTML(id)});
       if(bl.length>start && SECTIONS.find(s=>s.id===id)?.brk) bl[start].brk=true;
     });
-    customs.forEach((c,idx)=>bl.push({id:'custom'+idx, html:`<div class="bar mt">${esc(c.title)}</div><p>${esc(c.body)}</p>`}));
     return bl;
   };
   let pageH = availablePageHeight();
@@ -1352,6 +1567,10 @@ function snapshot(){
 function applyState(st){
   st=st||{};
   INPUT_IDS.forEach(id=>{ if(st.inputs && id in st.inputs) document.getElementById(id).value=st.inputs[id]; });
+  // bespoke sections have to exist in SECTIONS before the toggles, order and breaks are applied,
+  // since they are ordinary entries in that list now
+  customs = (Array.isArray(st.customs) ? clone(st.customs) : []).map(migrateCustom);
+  syncCustomSections();
   if(st.toggles) SECTIONS.forEach(s=>{ if(s.id in st.toggles) s.on=st.toggles[s.id]; });
   SECTIONS.forEach(s=>{ s.brk = !!(st.breaks && st.breaks[s.id]); });
   // v2 drafts keep their saved order; older drafts are reset to the natural template order once
@@ -1364,7 +1583,6 @@ function applyState(st){
     for(let j=idx-1;j>=0;j--){ const pos=order.indexOf(SECTIONS[j].id); if(pos>=0){ insertAt=pos+1; break; } }
     order.splice(insertAt,0,s.id);
   });
-  customs = Array.isArray(st.customs) ? clone(st.customs) : [];
   keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
   aboutPhotos = Array.isArray(st.aboutPhotos) ? clone(st.aboutPhotos) : [];
   quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
@@ -1609,7 +1827,7 @@ if(drafts.length){
   const cur=drafts.find(d=>d.id===currentId)||drafts[0];
   currentId=cur.id; applyState(cur.state);
 }else{
-  syncAdhocField();
+  syncAdhocField(); syncCustomSections();
   renderToggles(); renderCustoms(); renderKeyAspects(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
   document.getElementById('i-date').value=todayStr(); render(); refreshCover();
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
@@ -1674,8 +1892,9 @@ function aiState(){
   Object.entries(AI_FIELDS).forEach(([k,id])=>{ const el=document.getElementById(id); if(el) fields[k]=el.value; });
   return {
     fields,
-    sections_included: SECTIONS.filter(s=>s.on).map(s=>s.id),
-    sections_hidden: SECTIONS.filter(s=>!s.on).map(s=>s.id),
+    // a bespoke section is listed by its title — its id is a generated string and means nothing here
+    sections_included: SECTIONS.filter(s=>s.on).map(s=>s.custom?s.name:s.id),
+    sections_hidden: SECTIONS.filter(s=>!s.on).map(s=>s.custom?s.name:s.id),
     key_aspects: keyAspects.map(a=>({label:a.k, text:a.v})),
     project_quote_items: quoteItems.map(i=>({category:i.cat, description:i.desc, day_rate:i.rate, days:i.days})),
     project_quote_explanations: quoteNotes.map(n=>({label:n.label, text:n.text})),
@@ -1685,7 +1904,7 @@ function aiState(){
     key_terms: terms.map(t=>({heading:t.h, body:t.b})),
     retainer_terms: retainerTerms.map(t=>({heading:t.h, body:t.b})),
     retainer_terms_included: chkRetTerms,
-    custom_sections: customs.map(c=>({title:c.title, body:c.body})),
+    custom_sections: customs.map(c=>({title:c.title, body:customText(c)})),
     retainer_tiers: retTiers.map(t=>({videos_per_month:t.videos, monthly_price:t.price}))
   };
 }
@@ -1721,16 +1940,20 @@ const AI_APPLY = {
     keyAspects.splice(index,1); renderKeyAspects(); return 'Removed a key aspect';
   },
   add_custom_section({title,body}){
-    customs.push({title,body}); renderCustoms(); renderToggles(); return 'Added the “'+title+'” section';
+    const c={id:'c'+uid(), title, blocks:blocksFromText(body)};
+    customs.push(c); syncCustomSections(); renderCustoms(); renderToggles();
+    return 'Added the “'+title+'” section';
   },
   update_custom_section({index,title,body}){
     const c=customs[index]; if(!c) throw Error('No bespoke section at position '+index);
-    if(title!==undefined) c.title=title; if(body!==undefined) c.body=body;
-    renderCustoms(); renderToggles(); return 'Rewrote a bespoke section';
+    if(title!==undefined) c.title=title;
+    if(body!==undefined) setCustomText(c, body);
+    syncCustomSections(); renderCustoms(); renderToggles(); return 'Rewrote a bespoke section';
   },
   remove_custom_section({index}){
     if(!customs[index]) throw Error('No bespoke section at position '+index);
-    customs.splice(index,1); renderCustoms(); renderToggles(); return 'Removed a bespoke section';
+    customs.splice(index,1); syncCustomSections(); renderCustoms(); renderToggles();
+    return 'Removed a bespoke section';
   },
   update_retainer_tier({index,videos_per_month,monthly_price}){
     const t=retTiers[index]; if(!t) throw Error('No retainer tier at position '+index);

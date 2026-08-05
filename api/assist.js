@@ -127,13 +127,21 @@ const TOOLS = [
   },
   {
     name: "update_custom_section",
-    description: "Rewrite a bespoke section's heading or body, identified by its position (0 is the first).",
+    description:
+      "Rewrite a bespoke section's heading or content, identified by its position (0 is the first). " +
+      "Any photos and callout boxes in the section are kept where they are — sending body replaces " +
+      "only the writing around them.",
     input_schema: {
       type: "object",
       properties: {
         index: { type: "integer" },
         title: { type: "string", description: "New heading. Omit to leave unchanged." },
-        body: { type: "string", description: "New body copy. Omit to leave unchanged." },
+        body: {
+          type: "string",
+          description:
+            "New content, same conventions as add_custom_section ('## ' sub-heading, '- ' bullet, " +
+            "'| a | b |' table row). Omit to leave unchanged.",
+        },
       },
       required: ["index"],
     },
@@ -166,13 +174,19 @@ const TOOLS = [
   {
     name: "add_custom_section",
     description:
-      "Add a bespoke section: a navy section bar with a heading, followed by body copy. " +
-      "Use only when the content does not belong in an existing section.",
+      "Add a bespoke section: a navy section bar with a heading, followed by content. It is added " +
+      "at the end of the document; the user drags it wherever they want it. Use only when the " +
+      "content does not belong in an existing section.",
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string", description: "Section heading. Rendered in capitals." },
-        body: { type: "string", description: "Body copy. Blank lines separate paragraphs." },
+        body: {
+          type: "string",
+          description:
+            "The content. Blank lines separate paragraphs. A line starting '## ' is a sub-heading, " +
+            "'- ' a bullet, and '| a | b |' a table row (the first such line is the heading row).",
+        },
       },
       required: ["title", "body"],
     },
@@ -351,6 +365,12 @@ bullets or tables any other way.
 
 The bottom row of each pricing table reads "Total Investment" by default and can be renamed with
 set_field: project_quote_total_label and quote_options_total_label. Only change it when asked.
+
+A bespoke section is built from blocks: paragraphs, sub-headings, bullets, tables, callout boxes and
+photos. You write its content as plain text and the builder turns it into those blocks — "## " for a
+sub-heading, "- " for a bullet, "| a | b |" for a table row. Photos and callout boxes have no text
+form: you cannot add or change them, they are added by the user in the panel, and an edit you make
+leaves them untouched. Say so plainly if asked to put a picture in one.
 
 Writing style, which you must match exactly:
 - British English spelling: optimise, colour, programme, specialise, organise.
