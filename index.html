@@ -75,7 +75,14 @@ label.f input:focus,label.f textarea:focus,label.f select:focus,.cg-gr input:foc
 .cg-cx,.cg-rx{flex:0 0 17px;width:17px;text-align:center;color:#5b6398;cursor:pointer;font-size:11px;
   background:none;border:none;padding:0;font-family:inherit;line-height:1;}
 .cg-cx{flex:1 1 0;}
-.cg-cx:hover,.cg-rx:hover{color:var(--blue);}
+.cg-cx:hover:not(:disabled),.cg-rx:hover:not(:disabled){color:var(--blue);}
+.cg-cx:disabled,.cg-rx:disabled{opacity:.22;cursor:default;}
+/* the per-row controls sit in a fixed strip so the cells above and below still line up. They
+   stretch to the row's height — at their natural size they were an 11px-tall target. */
+.cg-rc{flex:0 0 53px;display:flex;gap:1px;justify-content:flex-end;align-self:stretch;}
+.cg-rc .cg-rx{height:auto;align-self:stretch;font-size:9px;}
+.cg-rc .cg-rx.del{font-size:11px;}
+.cg-gx .cg-cx{padding:3px 0;}
 .cg-grid{display:flex;flex-direction:column;gap:5px;}
 .cg-gbtn{display:flex;gap:6px;margin-top:7px;}
 .cg-gbtn .btn{width:auto;flex:1 1 auto;margin:0;padding:6px 9px;font-size:11.5px;}
@@ -697,10 +704,11 @@ function renderTableGrid(b, w){
   rows[0].forEach((_,ci)=>{
     const btn=document.createElement('button');
     btn.type='button'; btn.className='cg-cx'; btn.textContent='✕'; btn.title='Remove this column';
-    btn.onclick=()=>{ if(cols<=1) return; rows.forEach(r=>r.splice(ci,1)); redraw(); };
+    btn.disabled = cols<=1;   // greyed rather than silently doing nothing
+    if(!btn.disabled) btn.onclick=()=>{ rows.forEach(r=>r.splice(ci,1)); redraw(); };
     gx.appendChild(btn);
   });
-  gx.appendChild(Object.assign(document.createElement('span'),{className:'cg-rx'}));   // spacer over the row ✕
+  gx.appendChild(Object.assign(document.createElement('span'),{className:'cg-rc'}));   // spacer over the row controls
   grid.appendChild(gx);
   rows.forEach((r,ri)=>{
     const d=document.createElement('div'); d.className='cg-gr'+(ri===0?' cg-gh':'');
@@ -712,11 +720,21 @@ function renderTableGrid(b, w){
                        rows[ri][ci]=v; store(); render(); };
       d.appendChild(inp);
     });
-    const x=document.createElement('button');
-    x.type='button'; x.className='cg-rx'; x.textContent='✕';
-    x.title = ri===0?'Remove the heading row':'Remove this row';
-    x.onclick=()=>{ if(rows.length<=1) return; rows.splice(ri,1); redraw(); };
-    d.appendChild(x);
+    // move up / move down / remove. The heading row stays put — the top row is the heading by
+    // definition — so a body row can never be pushed above it.
+    const rc=document.createElement('div'); rc.className='cg-rc';
+    const ctrl=(txt,title,enabled,fn,cls)=>{
+      const el=document.createElement('button');
+      el.type='button'; el.className='cg-rx'+(cls?' '+cls:''); el.textContent=txt; el.title=title;
+      el.disabled=!enabled; if(enabled) el.onclick=fn;
+      return el;
+    };
+    const swap=(a,z)=>{ const t=rows[a]; rows[a]=rows[z]; rows[z]=t; redraw(); };
+    rc.appendChild(ctrl('▲','Move this row up',   ri>1,               ()=>swap(ri,ri-1)));
+    rc.appendChild(ctrl('▼','Move this row down', ri>0&&ri<rows.length-1, ()=>swap(ri,ri+1)));
+    rc.appendChild(ctrl('✕', ri===0?'Remove the heading row':'Remove this row',
+      rows.length>1, ()=>{ rows.splice(ri,1); redraw(); }, 'del'));
+    d.appendChild(rc);
     grid.appendChild(d);
   });
   w.appendChild(grid);
