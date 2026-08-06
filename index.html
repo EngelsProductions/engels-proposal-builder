@@ -399,6 +399,13 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-optdisc-val" value="0"></label>
       </div>
       <label class="f" style="margin-top:10px;">Total row label<input type="text" id="i-opt-totlabel" value="Total Investment"></label>
+      <label class="toggle" style="margin:12px 0 2px;"><input type="checkbox" id="chk-optpervid"><span>Show a price per video under the total</span></label>
+      <div id="opt-pervid" style="display:none;">
+        <label class="f" style="margin-top:9px;">Row label<input type="text" id="i-opt-pvlabel" value="Price per video"></label>
+        <label class="f" style="margin:10px 0 5px;">Videos included — each column's total is divided by this</label>
+        <div id="opt-vids"></div>
+        <p class="hint" style="margin-top:2px;">Leave a column blank and it shows a dash. Any discount is applied before dividing.</p>
+      </div>
       <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — “- ” starts a bullet, “| a | b |” a table row</label>
       <div id="opt-notes"></div>
       <button class="btn ghost" id="add-optnote">+ Add explanation</button>
@@ -541,6 +548,8 @@ let quoteNotes = []; // cost explanations {label, text} — project quote
 let showQuoteDays = true;  // show the day-rate/days columns on the project quote
 let optEqCols = true;      // give the Quote Options tier columns equal widths
 let optTotals = {};  // manual per-tier total override (blank = auto-sum of numeric cells)
+let optPerVid = false;     // show a price-per-video row beneath the Quote Options total
+let optVids = {};    // videos included per tier — divides that column's total
 // interpret a typed cell: blank -> dash, tick words -> '✓', a pure number -> price,
 // anything else -> kept as free text so a cell can read e.g. "2 rounds" or "Bespoke"
 function parseCell(raw){
@@ -1142,6 +1151,7 @@ function renderQuote(){
 document.getElementById('add-quotenote').onclick=()=>{ quoteNotes.push({label:'',text:''}); renderQuote(); render(); };
 document.getElementById('chk-quotedays').onchange=e=>{ showQuoteDays=e.target.checked; render(); };
 document.getElementById('chk-eqcols').onchange=e=>{ optEqCols=e.target.checked; render(); };
+document.getElementById('chk-optpervid').onchange=e=>{ optPerVid=e.target.checked; renderOptions(); render(); };
 
 // ---- quote options (comparison matrix) ----
 function renderOptions(){
@@ -1184,6 +1194,17 @@ function renderOptions(){
       const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(c)}<input type="number" class="otot" data-t="${esc(c)}" value="${isNum(optTotals[c])?optTotals[c]:''}" placeholder="${gbp(optTotal(c)).replace('£','')}"></label>`).join('');
       tw2.innerHTML=`<div class="row" style="flex-wrap:wrap;gap:7px;">${cells}</div>`;
       tw2.querySelectorAll('.otot').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value.trim(); if(v==='') delete optTotals[t]; else optTotals[t]=parseFloat(v.replace(/[£,]/g,''))||0; render(); }; });
+    }
+  }
+  // videos included per tier, which the price-per-video row divides that column's total by
+  const pvw=document.getElementById('opt-pervid');
+  if(pvw) pvw.style.display = optPerVid ? '' : 'none';
+  const vw=document.getElementById('opt-vids');
+  if(vw){ vw.innerHTML=''; const cols=optCols();
+    if(cols.length){
+      const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(c)}<input type="number" min="1" step="1" class="ovid" data-t="${esc(c)}" value="${isNum(optVids[c])?optVids[c]:''}" placeholder="—"></label>`).join('');
+      vw.innerHTML=`<div class="row" style="flex-wrap:wrap;gap:7px;">${cells}</div>`;
+      vw.querySelectorAll('.ovid').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value.trim(); if(v==='') delete optVids[t]; else optVids[t]=parseFloat(v)||0; render(); }; });
     }
   }
   renderNoteList(optNotes, 'opt-notes', renderOptions);
@@ -1355,6 +1376,8 @@ const gbpSigned=n=>n<0 ? '−'+gbp(Math.abs(n)) : gbp(n);
 // the pricing tables' bottom row is editable; an empty box falls back to the default rather
 // than printing a blank total row (which reads as a mistake on a sent proposal)
 const totLabel=id=>val(id).trim()||'Total Investment';
+// likewise the optional price-per-video row beneath it
+const perVidLabel=()=>val('i-opt-pvlabel').trim()||'Price per video';
 // escape, then turn **bold** markers into real bold (⌘B in the panel inserts the markers)
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>')
@@ -1536,6 +1559,10 @@ function optionsParts(){
   const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
   const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
   const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
+  // the price per video divides what the client actually pays, so it comes off the discounted total.
+  // A column with no video count shows a dash rather than a made-up figure.
+  const perVid=c=>{ const n=+optVids[c]; return (isNum(optVids[c]) && n>0) ? gbp((hasDisc?grandFor(c):optTotal(c))/n) : '—'; };
+  const showPerVid = optPerVid && cols.some(c=>isNum(optVids[c]) && +optVids[c]>0);
   return {
     tableClass: optEqCols ? ' eqcols' : '',
     head: `<div class="bar mt">QUOTE OPTIONS</div>`
@@ -1545,7 +1572,8 @@ function optionsParts(){
     // subtotal / discount / total always travel together as one indivisible group
     summary: (hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
         <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:'')
-      + `<tr class="total"><td>${esc(totLabel('i-opt-totlabel'))}</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`,
+      + `<tr class="total"><td>${esc(totLabel('i-opt-totlabel'))}</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`
+      + (showPerVid?`<tr class="rate"><th class="rh">${esc(perVidLabel())}</th>${cols.map(c=>`<td class="c">${perVid(c)}</td>`).join('')}</tr>`:''),
     vat: `<p class="note">${VAT_NOTE}</p>`,
     notes: notesListFor(optNotes)
   };
@@ -1735,7 +1763,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-signoff'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-opt-pvlabel','i-signoff'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -1747,6 +1775,7 @@ function snapshot(){
           keyAspects:clone(keyAspects), aboutPhotos:clone(aboutPhotos), quoteItems:clone(quoteItems),
           retTiers:clone(retTiers), retAdhocOn,
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
+          optPerVid, optVids:clone(optVids),
           quoteNotes:clone(quoteNotes), showQuoteDays, optEqCols,
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
@@ -1787,11 +1816,15 @@ function applyState(st){
   ['i-quote-totlabel','i-opt-totlabel'].forEach(id=>{
     if(!(st.inputs && id in st.inputs)) document.getElementById(id).value='Total Investment';
   });
+  if(!(st.inputs && 'i-opt-pvlabel' in st.inputs)) document.getElementById('i-opt-pvlabel').value='Price per video';
   if(!(st.inputs && 'i-signoff' in st.inputs)) document.getElementById('i-signoff').value=SIGNOFFS[0];
   optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
   if(!optTiers.length) optTiers = DEFAULT_OPTTIERS.slice();
   optRows = Array.isArray(st.optRows) ? clone(st.optRows) : DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
   optTotals = (st.optTotals && typeof st.optTotals==='object') ? {...st.optTotals} : {};
+  optVids = (st.optVids && typeof st.optVids==='object') ? {...st.optVids} : {};
+  optPerVid = !!st.optPerVid;
+  document.getElementById('chk-optpervid').checked = optPerVid;
   optNotes = Array.isArray(st.optNotes) ? clone(st.optNotes) : [];
   quoteNotes = Array.isArray(st.quoteNotes) ? clone(st.quoteNotes) : [];
   showQuoteDays = st.showQuoteDays!==false;
@@ -1984,7 +2017,7 @@ document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
 // wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#i-retlabel,#p-adhoc,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val,#i-quote-totlabel,#i-opt-totlabel')
+document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#i-retlabel,#p-adhoc,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val,#i-quote-totlabel,#i-opt-totlabel,#i-opt-pvlabel')
   .forEach(el=>el.addEventListener('input',render));
 // ⌘B / Ctrl+B in any panel text field wraps the selection in **bold** markers
 document.querySelector('.panel').addEventListener('keydown',e=>{
