@@ -263,6 +263,12 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
      (Safari especially) can fragment one page across two and leave a blank spill sheet */
   .pg{margin:0;box-shadow:none;break-after:page;break-inside:avoid;width:210mm;height:297mm;overflow:hidden;}
   .pg:last-child{break-after:auto;}
+  /* the photo frame's drop shadow has to go when printing. Chrome can't express a blur in PDF,
+     so it bakes it into a lossy greyscale JPEG soft mask and paints the shadow colour through
+     it. The JPEG can't hold a clean white (= fully transparent) field, so the shadow tint bleeds
+     across the whole mask rectangle and prints as a grey box round every photo. On screen the
+     shadow is untouched; on paper the white page does the same job of separating the frame. */
+  .ph .fr{box-shadow:none;}
 }
 </style>
 </head>
