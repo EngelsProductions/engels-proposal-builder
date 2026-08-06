@@ -524,6 +524,7 @@ const DEFAULT_RETTIERS = [ {videos:2, price:750}, {videos:4, price:1385} ];
 // one shared note printed under every pricing table (keeps them identical)
 const VAT_NOTE = 'Engels Productions is not VAT registered. Quote valid for 30 days; subject to T&amp;Cs and changes to scope.';
 const TIER_LADDER = ['Essential','Standard','Enhanced','Premium','Premium+'];  // budget → premium
+const MAX_OPT_COLS = 4;   // as many Quote Options columns as fit across the page
 const DEFAULT_OPTTIERS = ['Essential','Standard','Enhanced'];
 const DEFAULT_OPTROWS = [
   {cat:'Filmmaking',      vals:{Essential:1200, Standard:1200, Enhanced:1200}},
@@ -1189,7 +1190,7 @@ function renderOptions(){
       const l=document.createElement('label'); l.className='tierchk'+(on?' on':'');
       l.innerHTML=`<input type="checkbox" ${on?'checked':''}><span>${t}</span>`;
       l.querySelector('input').onchange=e=>{
-        if(e.target.checked){ if(optTiers.length>=4){ e.target.checked=false; alert('Up to four columns fit across the page.'); return; } optTiers.push(t); }
+        if(e.target.checked){ if(optTiers.length>=MAX_OPT_COLS){ e.target.checked=false; alert('Up to four columns fit across the page.'); return; } optTiers.push(t); }
         else optTiers=optTiers.filter(x=>x!==t);
         renderOptions(); render();
       };
@@ -2075,6 +2076,16 @@ document.getElementById('i-disc-type').addEventListener('change',render);
 document.getElementById('i-optdisc-type').addEventListener('change',render);
 document.getElementById('i-signoff').addEventListener('change',render);
 document.getElementById('btn-print').onclick=()=>window.print();
+// the browser names the saved PDF after the document title, so lend it the client's name for the
+// duration of the print and put it back afterwards. Characters a filesystem would choke on are
+// swapped for a dash — a date typed as 21/02/2026 would otherwise read as a folder path.
+const PAGE_TITLE=document.title;
+const printTitle=()=>{
+  const bits=[val('i-client'), val('i-title'), val('i-date')].map(s=>s.trim()).filter(Boolean);
+  return (bits.length ? bits.join(' — ') : PAGE_TITLE).replace(/[\/\\:*?"<>|]+/g,'-').slice(0,150);
+};
+window.addEventListener('beforeprint',()=>{ document.title=printTitle(); });
+window.addEventListener('afterprint',()=>{ document.title=PAGE_TITLE; });
 
 // ---- init: capture pristine defaults, then load saved drafts ----
 const DEFAULT_STATE = snapshot();
@@ -2122,7 +2133,35 @@ const AI_FIELDS = {
   portfolio_url:'i-porturl', portfolio_link_label:'i-portlabel',
   retainer_row_label:'i-retlabel', ad_hoc_rate:'p-adhoc',
   day_rate_dop:'r-dop', day_rate_editor:'r-ed',
-  project_quote_total_label:'i-quote-totlabel', quote_options_total_label:'i-opt-totlabel'
+  project_quote_total_label:'i-quote-totlabel', quote_options_total_label:'i-opt-totlabel',
+  quote_options_per_video_label:'i-opt-pvlabel', sign_off:'i-signoff'
+};
+// A wrong index rewrites the wrong entry, and the user only finds out by reading the proposal
+// again. Every update/remove tool may name what it expects to find at that position; if the
+// entry there says something else the change is refused and reported rather than applied.
+function aiExpect(actual, expected, what){
+  if(expected===undefined || expected===null || String(expected).trim()==='') return;
+  const norm=s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+  const a=norm(actual), e=norm(expected);
+  if(a===e || a.startsWith(e) || e.startsWith(a)) return;
+  throw Error('Left alone: expected the '+what+' there to be “'+expected+'” but it is “'+actual+'”.');
+}
+// the lists the assistant may reorder, and how to redraw each one
+const AI_LISTS = {
+  key_aspects:                 ()=>[keyAspects,    renderKeyAspects],
+  key_terms:                   ()=>[terms,         renderTerms],
+  retainer_terms:              ()=>[retainerTerms, renderRetTerms],
+  project_quote_items:         ()=>[quoteItems,    renderQuote],
+  project_quote_explanations:  ()=>[quoteNotes,    renderQuote],
+  quote_options_rows:          ()=>[optRows,       renderOptions],
+  quote_options_explanations:  ()=>[optNotes,      renderOptions]
+};
+// the plain on/off switches in the panel, so "drop the ad hoc column" needs no new tool each time
+const AI_OPTIONS = {
+  ad_hoc_column:        {get:()=>retAdhocOn,   set:v=>{ retAdhocOn=v;  document.getElementById('chk-adhoc').checked=v; renderRetTiers(); }},
+  quote_day_columns:    {get:()=>showQuoteDays, set:v=>{ showQuoteDays=v; document.getElementById('chk-quotedays').checked=v; }},
+  equal_option_columns: {get:()=>optEqCols,    set:v=>{ optEqCols=v;   document.getElementById('chk-eqcols').checked=v; }},
+  retainer_terms:       {get:()=>chkRetTerms,  set:v=>{ chkRetTerms=v; document.getElementById('chk-retterms').checked=v; }}
 };
 const aiNotes = s => s==='quote' ? quoteNotes : optNotes;
 const aiTerms = l => l==='retainer' ? retainerTerms : terms;
@@ -2146,7 +2185,9 @@ const AI_TARGET = {
   add_option_row:'options', update_option_row:'options', remove_option_row:'options',
   add_key_aspect:'keyaspects', update_key_aspect:'keyaspects', remove_key_aspect:'keyaspects',
   add_term:'terms', update_term:'terms', remove_term:'terms',
-  update_retainer_tier:'scope'
+  update_retainer_tier:'scope', add_retainer_tier:'scope', remove_retainer_tier:'scope',
+  toggle_option_column:'options', set_option_column_title:'options',
+  set_option_column_total:'options', set_price_per_video:'options'
 };
 
 // what the assistant is shown: the proposal's words and numbers, never the embedded photos
@@ -2158,50 +2199,73 @@ function aiState(){
     // a bespoke section is listed by its title — its id is a generated string and means nothing here
     sections_included: SECTIONS.filter(s=>s.on).map(s=>s.custom?s.name:s.id),
     sections_hidden: SECTIONS.filter(s=>!s.on).map(s=>s.custom?s.name:s.id),
-    key_aspects: keyAspects.map(a=>({label:a.k, text:a.v})),
-    project_quote_items: quoteItems.map(i=>({category:i.cat, description:i.desc, day_rate:i.rate, days:i.days})),
-    project_quote_explanations: quoteNotes.map(n=>({label:n.label, text:n.text})),
+    // every list entry carries its own index, so a position never has to be counted out
+    key_aspects: keyAspects.map((a,i)=>({index:i, label:a.k, text:a.v})),
+    project_quote_items: quoteItems.map((it,i)=>({index:i, category:it.cat, description:it.desc, day_rate:it.rate, days:it.days})),
+    project_quote_explanations: quoteNotes.map((n,i)=>({index:i, label:n.label, text:n.text})),
     // shown under the titles that print, so the assistant names columns the way the proposal does
-    quote_options_rows: optRows.map(r=>({category:r.cat,
+    quote_options_rows: optRows.map((r,i)=>({index:i, category:r.cat,
       values:Object.fromEntries(optCols().filter(c=>r.vals[c]!==undefined).map(c=>[colLabel(c), r.vals[c]]))})),
-    quote_options_columns: optCols().map(colLabel),
-    quote_options_explanations: optNotes.map(n=>({label:n.label, text:n.text})),
-    key_terms: terms.map(t=>({heading:t.h, body:t.b})),
-    retainer_terms: retainerTerms.map(t=>({heading:t.h, body:t.b})),
+    quote_options_columns: optCols().map(c=>({name:colLabel(c), tier:c, total:optTotal(c),
+      videos_included: isNum(optVids[c]) ? +optVids[c] : null})),
+    quote_options_columns_off: TIER_LADDER.filter(t=>!optTiers.includes(t)),
+    quote_options_price_per_video: optPerVid,
+    quote_options_explanations: optNotes.map((n,i)=>({index:i, label:n.label, text:n.text})),
+    discounts: {
+      quote:   {label:val('i-disc-label'),    type:val('i-disc-type'),    amount:num('i-disc-val')},
+      options: {label:val('i-optdisc-label'), type:val('i-optdisc-type'), amount:num('i-optdisc-val')}
+    },
+    key_terms: terms.map((t,i)=>({index:i, heading:t.h, body:t.b})),
+    retainer_terms: retainerTerms.map((t,i)=>({index:i, heading:t.h, body:t.b})),
     retainer_terms_included: chkRetTerms,
-    custom_sections: customs.map(c=>({title:c.title, body:customText(c)})),
-    retainer_tiers: retTiers.map(t=>({videos_per_month:t.videos, monthly_price:t.price}))
+    custom_sections: customs.map((c,i)=>({index:i, title:c.title, body:customText(c),
+      included: !!SECTIONS.find(s=>s.id===c.id)?.on})),
+    retainer_tiers: retTiers.map((t,i)=>({index:i, videos_per_month:t.videos, monthly_price:t.price})),
+    // the running order, and which sections are forced to start on a fresh page
+    section_order: order.map(id=>SECTIONS.find(s=>s.id===id)).filter(Boolean)
+      .map(s=>({section:s.custom?s.name:s.id, on:s.on, new_page:!!s.brk})),
+    settings: Object.fromEntries(Object.entries(AI_OPTIONS).map(([k,o])=>[k,o.get()]))
   };
 }
 
 const AI_APPLY = {
   set_field({field,value}){
     const el=document.getElementById(AI_FIELDS[field]); if(!el) throw Error('Unknown field: '+field);
-    el.value=value; return 'Updated '+field.replace(/_/g,' ');
+    // a dropdown only accepts one of its own options — anything else would blank it
+    if(el.tagName==='SELECT'){
+      const opt=[...el.options].find(o=>o.value.toLowerCase()===String(value).trim().toLowerCase());
+      if(!opt) throw Error('Left alone: “'+value+'” is not one of the '+field.replace(/_/g,' ')+' choices.');
+      el.value=opt.value;
+    } else el.value=value;
+    return 'Updated '+field.replace(/_/g,' ');
   },
   add_cost_explanation({section,label,text}){
     aiNotes(section).push({label,text}); renderQuote(); renderOptions();
     return 'Added a cost explanation';
   },
-  update_cost_explanation({section,index,label,text}){
+  update_cost_explanation({section,index,label,text,expect}){
     const n=aiNotes(section)[index]; if(!n) throw Error('No explanation at position '+index);
+    aiExpect(n.label, expect, 'explanation');
     if(label!==undefined) n.label=label; if(text!==undefined) n.text=text;
     renderQuote(); renderOptions(); return 'Rewrote a cost explanation';
   },
-  remove_cost_explanation({section,index}){
+  remove_cost_explanation({section,index,expect}){
     const a=aiNotes(section); if(!a[index]) throw Error('No explanation at position '+index);
+    aiExpect(a[index].label, expect, 'explanation');
     a.splice(index,1); renderQuote(); renderOptions(); return 'Removed a cost explanation';
   },
   add_key_aspect({label,text}){
     keyAspects.push({k:label,v:text}); renderKeyAspects(); return 'Added a key aspect';
   },
-  update_key_aspect({index,label,text}){
+  update_key_aspect({index,label,text,expect}){
     const a=keyAspects[index]; if(!a) throw Error('No key aspect at position '+index);
+    aiExpect(a.k, expect, 'key aspect');
     if(label!==undefined) a.k=label; if(text!==undefined) a.v=text;
     renderKeyAspects(); return 'Rewrote a key aspect';
   },
-  remove_key_aspect({index}){
+  remove_key_aspect({index,expect}){
     if(!keyAspects[index]) throw Error('No key aspect at position '+index);
+    aiExpect(keyAspects[index].k, expect, 'key aspect');
     keyAspects.splice(index,1); renderKeyAspects(); return 'Removed a key aspect';
   },
   add_custom_section({title,body}){
@@ -2209,14 +2273,16 @@ const AI_APPLY = {
     customs.push(c); syncCustomSections(); renderCustoms(); renderToggles();
     return 'Added the “'+title+'” section';
   },
-  update_custom_section({index,title,body}){
+  update_custom_section({index,title,body,expect}){
     const c=customs[index]; if(!c) throw Error('No bespoke section at position '+index);
+    aiExpect(c.title, expect, 'section');
     if(title!==undefined) c.title=title;
     if(body!==undefined) setCustomText(c, body);
     syncCustomSections(); renderCustoms(); renderToggles(); return 'Rewrote a bespoke section';
   },
-  remove_custom_section({index}){
+  remove_custom_section({index,expect}){
     if(!customs[index]) throw Error('No bespoke section at position '+index);
+    aiExpect(customs[index].title, expect, 'section');
     customs.splice(index,1); syncCustomSections(); renderCustoms(); renderToggles();
     return 'Removed a bespoke section';
   },
@@ -2226,18 +2292,30 @@ const AI_APPLY = {
     if(monthly_price!==undefined) t.price=+monthly_price;
     renderRetTiers(); return 'Updated a retainer tier';
   },
+  add_retainer_tier({videos_per_month,monthly_price}){
+    if(retColCount()>=MAX_RET_COLS) throw Error('Left alone: the retainer table is full — the Ad Hoc column or a tier has to go first.');
+    retTiers.push({videos:+videos_per_month, price:+monthly_price});
+    renderRetTiers(); return 'Added a retainer tier';
+  },
+  remove_retainer_tier({index}){
+    if(!retTiers[index]) throw Error('No retainer tier at position '+index);
+    if(retTiers.length<2) throw Error('Left alone: that is the only retainer tier.');
+    retTiers.splice(index,1); renderRetTiers(); return 'Removed a retainer tier';
+  },
   add_quote_item({category,description,day_rate,days}){
     quoteItems.push({cat:category, desc:description, rate:String(day_rate), days:String(days)});
     renderQuote(); return 'Added a quote line item';
   },
-  update_quote_item({index,category,description,day_rate,days}){
+  update_quote_item({index,category,description,day_rate,days,expect}){
     const it=quoteItems[index]; if(!it) throw Error('No quote row at position '+index);
+    aiExpect(it.cat, expect, 'quote row');
     if(category!==undefined) it.cat=category; if(description!==undefined) it.desc=description;
     if(day_rate!==undefined) it.rate=String(day_rate); if(days!==undefined) it.days=String(days);
     renderQuote(); return 'Updated a quote line item';
   },
-  remove_quote_item({index}){
+  remove_quote_item({index,expect}){
     if(!quoteItems[index]) throw Error('No quote row at position '+index);
+    aiExpect(quoteItems[index].cat, expect, 'quote row');
     quoteItems.splice(index,1); renderQuote(); return 'Removed a quote line item';
   },
   // values go through parseCell exactly as typed input does, so a number becomes a price,
@@ -2246,32 +2324,106 @@ const AI_APPLY = {
     optRows.push({cat:category, vals:aiCells(values)}); renderOptions();
     return 'Added a Quote Options row';
   },
-  update_option_row({index,category,values}){
+  update_option_row({index,category,values,expect}){
     const r=optRows[index]; if(!r) throw Error('No Quote Options row at position '+index);
+    aiExpect(r.cat, expect, 'Quote Options row');
     if(category!==undefined) r.cat=category;
     Object.assign(r.vals, aiCells(values));
     renderOptions(); return 'Updated a Quote Options row';
   },
-  remove_option_row({index}){
+  remove_option_row({index,expect}){
     if(!optRows[index]) throw Error('No Quote Options row at position '+index);
+    aiExpect(optRows[index].cat, expect, 'Quote Options row');
     optRows.splice(index,1); renderOptions(); return 'Removed a Quote Options row';
   },
   add_term({heading,body,list}){
     aiTerms(list).push({h:heading,b:body}); renderTerms(); renderRetTerms();
     return 'Added a term';
   },
-  update_term({index,heading,body,list}){
+  update_term({index,heading,body,list,expect}){
     const t=aiTerms(list)[index]; if(!t) throw Error('No term at position '+index);
+    aiExpect(t.h, expect, 'term');
     if(heading!==undefined) t.h=heading; if(body!==undefined) t.b=body;
     renderTerms(); renderRetTerms(); return 'Rewrote a term';
   },
-  remove_term({index,list}){
+  remove_term({index,list,expect}){
     const a=aiTerms(list); if(!a[index]) throw Error('No term at position '+index);
+    aiExpect(a[index].h, expect, 'term');
     a.splice(index,1); renderTerms(); renderRetTerms(); return 'Removed a term';
   },
   toggle_section({section,on}){
     const s=SECTIONS.find(x=>x.id===section); if(!s) throw Error('Unknown section: '+section);
     s.on=!!on; renderToggles(); return (on?'Included ':'Hid ')+section;
+  },
+  toggle_custom_section({index,on,expect}){
+    const c=customs[index]; if(!c) throw Error('No bespoke section at position '+index);
+    aiExpect(c.title, expect, 'section');
+    const s=SECTIONS.find(x=>x.id===c.id); if(!s) throw Error('That bespoke section is not in the list yet.');
+    s.on=!!on; renderToggles(); return (on?'Included ':'Hid ')+'“'+c.title+'”';
+  },
+  set_page_break({section,on}){
+    const s=SECTIONS.find(x=>x.id===section) || SECTIONS.find(x=>x.custom && x.name===section);
+    if(!s) throw Error('Unknown section: '+section);
+    s.brk=!!on; renderToggles();
+    return (on?'Starts ':'No longer starts ')+(s.custom?s.name:section)+' on a new page';
+  },
+  move_section({section,to_index}){
+    const s=SECTIONS.find(x=>x.id===section) || SECTIONS.find(x=>x.custom && x.name===section);
+    if(!s) throw Error('Unknown section: '+section);
+    const at=order.indexOf(s.id); if(at<0) throw Error('That section is not in the running order.');
+    const to=Math.max(0, Math.min(order.length-1, +to_index));
+    order.splice(at,1); order.splice(to,0,s.id); renderToggles();
+    return 'Moved '+(s.custom?s.name:section)+' in the running order';
+  },
+  move_item({list,from,to}){
+    const entry=AI_LISTS[list]; if(!entry) throw Error('Unknown list: '+list);
+    const [arr,rerender]=entry();
+    if(!arr[from]) throw Error('Nothing at position '+from+' in '+list.replace(/_/g,' '));
+    const at=Math.max(0, Math.min(arr.length-1, +to));
+    const [m]=arr.splice(from,1); arr.splice(at,0,m); rerender();
+    return 'Reordered '+list.replace(/_/g,' ');
+  },
+  set_option({option,on}){
+    const o=AI_OPTIONS[option]; if(!o) throw Error('Unknown setting: '+option);
+    o.set(!!on); return (on?'Switched on ':'Switched off ')+option.replace(/_/g,' ');
+  },
+  // ---- Quote Options columns ----
+  toggle_option_column({tier,on}){
+    if(!TIER_LADDER.includes(tier)) throw Error('Unknown column: '+tier);
+    if(on){
+      if(optTiers.includes(tier)) return 'The '+tier+' column was already showing';
+      if(optTiers.length>=MAX_OPT_COLS) throw Error('Left alone: only '+MAX_OPT_COLS+' columns fit across the page.');
+      optTiers.push(tier);
+    } else optTiers=optTiers.filter(t=>t!==tier);
+    renderOptions(); return (on?'Added the ':'Removed the ')+colLabel(tier)+' column';
+  },
+  set_option_column_title({tier,title}){
+    if(!optTiers.includes(tier)) throw Error('Left alone: the '+tier+' column is not showing.');
+    if(String(title||'').trim()==='') delete optLabels[tier]; else optLabels[tier]=title;
+    renderOptions(); return 'Retitled a column to “'+colLabel(tier)+'”';
+  },
+  set_option_column_total({tier,total}){
+    if(!optTiers.includes(tier)) throw Error('Left alone: the '+tier+' column is not showing.');
+    if(total===null||total===undefined||total==='') delete optTotals[tier]; else optTotals[tier]=+total;
+    renderOptions(); return 'Set the '+colLabel(tier)+' total';
+  },
+  set_price_per_video({on,videos,label}){
+    if(on!==undefined){ optPerVid=!!on; document.getElementById('chk-optpervid').checked=optPerVid; }
+    Object.entries(videos||{}).forEach(([k,v])=>{
+      const key=String(k).trim().toLowerCase();
+      const tier=optCols().find(c=>c.toLowerCase()===key || colLabel(c).toLowerCase()===key);
+      if(!tier) return;
+      if(v===null||v==='') delete optVids[tier]; else optVids[tier]=+v;
+    });
+    if(label!==undefined) document.getElementById('i-opt-pvlabel').value=label;
+    renderOptions(); return 'Set the price per video row';
+  },
+  set_discount({section,amount,type,label}){
+    const p = section==='quote' ? 'i-disc' : 'i-optdisc';
+    if(amount!==undefined) document.getElementById(p+'-val').value=String(+amount);
+    if(type!==undefined) document.getElementById(p+'-type').value = type==='pct' ? 'pct' : 'gbp';
+    if(label!==undefined) document.getElementById(p+'-label').value=label;
+    return 'Set the '+(section==='quote'?'Project Quote':'Quote Options')+' discount';
   }
 };
 

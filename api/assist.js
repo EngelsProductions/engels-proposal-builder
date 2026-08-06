@@ -23,12 +23,35 @@ const FIELDS = [
   "portfolio_link_label", "retainer_row_label", "ad_hoc_rate",
   "day_rate_dop", "day_rate_editor",
   "project_quote_total_label", "quote_options_total_label",
+  "quote_options_per_video_label", "sign_off",
 ];
 
 const SECTIONS = [
   "toc", "about", "keyaspects", "includes", "portfolio", "scope",
   "quote", "options", "rates", "terms", "retainer", "next",
 ];
+
+// the Quote Options ladder: a column always keeps its rung, whatever it is retitled to
+const TIERS = ["Essential", "Standard", "Enhanced", "Premium", "Premium+"];
+
+// the lists whose entries can be reordered
+const LISTS = [
+  "key_aspects", "key_terms", "retainer_terms", "project_quote_items",
+  "project_quote_explanations", "quote_options_rows", "quote_options_explanations",
+];
+
+// the plain on/off switches in the control panel
+const OPTIONS = ["ad_hoc_column", "quote_day_columns", "equal_option_columns", "retainer_terms"];
+
+// every update/remove tool takes this: it names what the entry at that index currently says, and
+// the change is refused if it says something else. Cheap insurance against editing the wrong row.
+const EXPECT = {
+  type: "string",
+  description:
+    "The heading, label or category the entry at that index currently has, copied exactly from the " +
+    "state you were given. Always send it. If it does not match, the change is refused rather than " +
+    "applied to the wrong entry.",
+};
 
 const TOOLS = [
   {
@@ -68,6 +91,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         section: { type: "string", enum: ["quote", "options"] },
         index: { type: "integer", description: "Zero-based position in that section's explanation list." },
         label: { type: "string", description: "New label. Omit to leave unchanged." },
@@ -82,6 +106,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         section: { type: "string", enum: ["quote", "options"] },
         index: { type: "integer" },
       },
@@ -109,6 +134,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         index: { type: "integer" },
         label: { type: "string", description: "New bold lead-in. Omit to leave unchanged." },
         text: { type: "string", description: "New text. Omit to leave unchanged." },
@@ -121,7 +147,10 @@ const TOOLS = [
     description: "Delete a Key Aspects line by its position.",
     input_schema: {
       type: "object",
-      properties: { index: { type: "integer" } },
+      properties: {
+        expect: EXPECT,
+        index: { type: "integer" },
+      },
       required: ["index"],
     },
   },
@@ -134,6 +163,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         index: { type: "integer" },
         title: { type: "string", description: "New heading. Omit to leave unchanged." },
         body: {
@@ -151,7 +181,10 @@ const TOOLS = [
     description: "Delete a bespoke section by its position.",
     input_schema: {
       type: "object",
-      properties: { index: { type: "integer" } },
+      properties: {
+        expect: EXPECT,
+        index: { type: "integer" },
+      },
       required: ["index"],
     },
   },
@@ -211,6 +244,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         index: { type: "integer", description: "Zero-based row position." },
         category: { type: "string" },
         description: { type: "string" },
@@ -225,7 +259,10 @@ const TOOLS = [
     description: "Delete a Project Quote line item by its row position.",
     input_schema: {
       type: "object",
-      properties: { index: { type: "integer" } },
+      properties: {
+        expect: EXPECT,
+        index: { type: "integer" },
+      },
       required: ["index"],
     },
   },
@@ -259,6 +296,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         index: { type: "integer", description: "Zero-based row position." },
         category: { type: "string", description: "New row label. Omit to leave unchanged." },
         values: {
@@ -275,7 +313,10 @@ const TOOLS = [
     description: "Delete a Quote Options row by its position.",
     input_schema: {
       type: "object",
-      properties: { index: { type: "integer" } },
+      properties: {
+        expect: EXPECT,
+        index: { type: "integer" },
+      },
       required: ["index"],
     },
   },
@@ -306,6 +347,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         index: { type: "integer", description: "Zero-based position in that list." },
         heading: { type: "string", description: "New heading. Omit to leave unchanged." },
         body: { type: "string", description: "New body. Omit to leave unchanged." },
@@ -320,6 +362,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        expect: EXPECT,
         index: { type: "integer" },
         list: { type: "string", enum: ["standard", "retainer"], description: "Defaults to standard." },
       },
@@ -336,6 +379,178 @@ const TOOLS = [
         on: { type: "boolean", description: "true to include the section, false to leave it out." },
       },
       required: ["section", "on"],
+    },
+  },
+  {
+    name: "toggle_custom_section",
+    description: "Show or hide a bespoke section, by its position in custom_sections.",
+    input_schema: {
+      type: "object",
+      properties: {
+        expect: EXPECT,
+        index: { type: "integer" },
+        on: { type: "boolean" },
+      },
+      required: ["index", "on"],
+    },
+  },
+  {
+    name: "set_page_break",
+    description:
+      "Make a section start on a fresh page, or stop it doing so. Use when asked to keep something " +
+      "together or to give a section a page of its own — never to fix spacing or appearance.",
+    input_schema: {
+      type: "object",
+      properties: {
+        section: { type: "string", description: "A section id from SECTIONS, or a bespoke section's exact title." },
+        on: { type: "boolean" },
+      },
+      required: ["section", "on"],
+    },
+  },
+  {
+    name: "move_section",
+    description:
+      "Move a section to a different position in the running order. Positions are zero-based and " +
+      "count every section in section_order, switched on or not.",
+    input_schema: {
+      type: "object",
+      properties: {
+        section: { type: "string", description: "A section id, or a bespoke section's exact title." },
+        to_index: { type: "integer", description: "Zero-based position to move it to." },
+      },
+      required: ["section", "to_index"],
+    },
+  },
+  {
+    name: "move_item",
+    description:
+      "Reorder one entry within a list — key aspects, terms, quote rows, cost explanations. " +
+      "Use when asked to put something first, last, or above or below something else.",
+    input_schema: {
+      type: "object",
+      properties: {
+        list: { type: "string", enum: LISTS },
+        from: { type: "integer", description: "The entry's current zero-based position." },
+        to: { type: "integer", description: "Where it should end up, zero-based." },
+      },
+      required: ["list", "from", "to"],
+    },
+  },
+  {
+    name: "set_option",
+    description:
+      "Switch one of the panel's on/off settings. ad_hoc_column is the Ad Hoc comparison column on " +
+      "the retainer table; quote_day_columns shows day rates and days on the Project Quote; " +
+      "equal_option_columns keeps the Quote Options columns the same width; retainer_terms appends " +
+      "the retainer-specific terms.",
+    input_schema: {
+      type: "object",
+      properties: {
+        option: { type: "string", enum: OPTIONS },
+        on: { type: "boolean" },
+      },
+      required: ["option", "on"],
+    },
+  },
+  {
+    name: "add_retainer_tier",
+    description: "Add a column to Monthly Retainer Options: a number of videos per month at a monthly price.",
+    input_schema: {
+      type: "object",
+      properties: {
+        videos_per_month: { type: "number" },
+        monthly_price: { type: "number" },
+      },
+      required: ["videos_per_month", "monthly_price"],
+    },
+  },
+  {
+    name: "remove_retainer_tier",
+    description: "Delete a Monthly Retainer Options column by its position (0 is the left-most).",
+    input_schema: {
+      type: "object",
+      properties: { index: { type: "integer" } },
+      required: ["index"],
+    },
+  },
+  {
+    name: "toggle_option_column",
+    description:
+      "Add or remove a Quote Options column. Columns are rungs on a fixed budget-to-premium ladder " +
+      "and always print in that order; up to four fit across the page. Removing one leaves the " +
+      "figures typed against it, so putting it back restores them.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tier: { type: "string", enum: TIERS, description: "The ladder rung, not the printed title." },
+        on: { type: "boolean" },
+      },
+      required: ["tier", "on"],
+    },
+  },
+  {
+    name: "set_option_column_title",
+    description:
+      "Change the title printed above a Quote Options column, e.g. print the Enhanced column as " +
+      "'Priority'. The column keeps its rung, its figures and its place in the order. Send an empty " +
+      "title to go back to the rung's own name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tier: { type: "string", enum: TIERS, description: "The ladder rung, as shown in quote_options_columns." },
+        title: { type: "string", description: "What to print above it. Empty string restores the default." },
+      },
+      required: ["tier", "title"],
+    },
+  },
+  {
+    name: "set_option_column_total",
+    description:
+      "Override a Quote Options column's total, or clear the override so it goes back to adding up " +
+      "the prices in that column. Only set one when asked for a figure that is not the sum.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tier: { type: "string", enum: TIERS },
+        total: { type: ["number", "null"], description: "The total to show, or null to auto-sum again." },
+      },
+      required: ["tier", "total"],
+    },
+  },
+  {
+    name: "set_price_per_video",
+    description:
+      "Control the price-per-video row under the Quote Options total. It divides each column's " +
+      "total (after any discount) by the number of videos that column includes. A column with no " +
+      "number shows a dash, and the row is hidden entirely if no column has one.",
+    input_schema: {
+      type: "object",
+      properties: {
+        on: { type: "boolean", description: "Show or hide the row. Omit to leave as is." },
+        videos: {
+          type: "object",
+          description: "Videos included per column, keyed by the column name from quote_options_columns. Send null to clear one.",
+          additionalProperties: { type: ["number", "null"] },
+        },
+        label: { type: "string", description: "Row label. Defaults to 'Price per video'. Omit to leave as is." },
+      },
+    },
+  },
+  {
+    name: "set_discount",
+    description:
+      "Set the discount applied to a pricing table's total. Type 'gbp' takes that many pounds off " +
+      "each column; 'pct' takes that percentage off. An amount of 0 removes the discount row.",
+    input_schema: {
+      type: "object",
+      properties: {
+        section: { type: "string", enum: ["quote", "options"] },
+        amount: { type: "number", description: "Pounds, or percent when type is 'pct'. 0 removes it." },
+        type: { type: "string", enum: ["gbp", "pct"] },
+        label: { type: "string", description: "Row label. Defaults to 'Discount'. Omit to leave as is." },
+      },
+      required: ["section", "amount"],
     },
   },
 ];
@@ -366,6 +581,20 @@ bullets or tables any other way.
 The bottom row of each pricing table reads "Total Investment" by default and can be renamed with
 set_field: project_quote_total_label and quote_options_total_label. Only change it when asked.
 
+The Quote Options table is a fixed budget-to-premium ladder — Essential, Standard, Enhanced, Premium,
+Premium+ — of which up to four columns show at once, always in that order. A column is always
+identified by its rung, never by what it prints: quote_options_columns gives you both, as "tier" and
+"name". Retitling a column with set_option_column_title changes only the printed name; its figures,
+its total and its place in the order are untouched. Under the total there can be a price-per-video
+row (set_price_per_video), which divides each column's discounted total by the videos that column
+includes. Both tables take a discount through set_discount.
+
+You can also arrange the document: toggle_section and toggle_custom_section include or drop a section,
+move_section and move_item reorder, set_page_break starts a section on a fresh page, and set_option
+covers the panel's remaining on/off switches. Use these when the user asks for them. They change what
+is in the document and in what order — never reach for them to adjust how something looks, and never
+add a page break to fix spacing.
+
 A bespoke section is built from blocks: paragraphs, sub-headings, bullets, tables, callout boxes and
 photos. You write its content as plain text and the builder turns it into those blocks — "## " for a
 sub-heading, "- " for a bullet, "| a | b |" for a table row. Photos and callout boxes have no text
@@ -390,11 +619,35 @@ Key Terms & Conditions holds two lists: the standard terms, and retainer-specifi
 only print when retainer_terms_included is true. When asked to change wording that already
 exists, call update_term on the entry rather than adding a near-duplicate.
 
+STAY INSIDE WHAT WAS ASKED. This is the thing you most often get wrong, and it is the thing the user
+most notices. The proposal is written and checked by hand; anything you touch that you were not asked
+to touch is damage, even when your version reads better.
+- Change only what the request actually names. Everything else in the proposal stays byte-for-byte
+  as it is, including copy you consider weak, inconsistent or wrongly ordered.
+- When the user points at one thing — "the second key aspect", "the drone row", "the Enhanced column",
+  "the payment terms" — every tool call you make in that turn addresses that one thing. Do not tidy
+  its neighbours, do not restate a nearby paragraph, do not renumber or reorder anything around it.
+- If a request would read as a whole-document instruction but the user has named a section, treat the
+  section as the boundary. "Make it shorter" after naming the About section means the About body only.
+- Wanting to fix something else you noticed is not permission to fix it. Mention it in your sentence
+  to the user and leave it alone.
+- One idea, one tool call. Rewriting a whole list because one entry was wrong is the classic mistake:
+  call update_* on the entry that is wrong and leave its siblings untouched.
+- Only when the request is genuinely document-wide — a client rename, a change of tone throughout, a
+  proofread — do you touch several sections at once.
+
+BEFORE EVERY UPDATE OR REMOVAL, name what you expect to be there. Each list entry in the state you are
+given carries its own "index" — use it rather than counting, and send the entry's current heading,
+label or category as "expect". If it does not match, the builder refuses the change and tells the user,
+which is the intended outcome: nothing silently rewritten in the wrong place. An entry whose index you
+cannot establish is one you do not touch — say so instead.
+
 How to work:
 - You are given the proposal's current contents. Read it before acting so your additions fit what is there.
 - When the user says "update", "change", "reword" or "fix" something that already exists, use the
   update_* tool for that item. Only add a new entry when they are genuinely asking for one more.
-- Make every change the request implies, in one go — several tool calls in one turn is normal and expected.
+- Make every change the request implies, in one go — several tool calls in one turn is normal and
+  expected, as long as every one of them is inside what was asked for.
 - Positions in lists are zero-based and refer to the state you were given.
 - If the request is ambiguous in a way that changes what you would write, make the reasonable choice and
   say which way you went. Only ask when you genuinely cannot proceed.
