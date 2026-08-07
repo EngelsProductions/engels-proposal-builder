@@ -1420,7 +1420,12 @@ const perVidLabel=()=>val('i-opt-pvlabel').trim()||'Price per video';
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>')
   .replace(/\n/g,'<br>');
-function footer(n){return `<div class="foot"><div class="b">${esc(val('i-client'))} — Video Production Proposal<span>jack.gilbey@engelsproductions.co.uk · 07889 791554</span></div><div class="pg-n">${n}</div></div>`;}
+// the footer follows the Proposal title field rather than restating a fixed one; with no title it is
+// just the client, not a client left hanging after a hyphen
+function footer(n){
+  const t=val('i-title').trim();
+  return `<div class="foot"><div class="b">${esc(val('i-client'))}${t?' - '+esc(t):''}<span>jack.gilbey@engelsproductions.co.uk · 07889 791554</span></div><div class="pg-n">${n}</div></div>`;
+}
 
 // ---- pricing calc ----
 function calc(){
