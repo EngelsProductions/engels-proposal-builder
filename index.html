@@ -164,10 +164,10 @@ label.f input:focus,label.f textarea:focus,label.f select:focus,.cg-gr input:foc
   box-shadow:0 2px 9px rgba(20,30,60,.26);overflow:hidden;background:#eef4f9;}
 .ph .fr img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 /* the reflection is the frame mirrored, so its rounded corners belong at the top */
+/* the mirroring and the fade are baked into the reflection image itself (see bakeReflection), so
+   this is an ordinary picture in the same frame-shaped box the photo above it uses */
 .ph .rf{position:relative;padding-bottom:15%;overflow:hidden;margin-top:3px;border-radius:7px 7px 0 0;}
-.ph .rf .in{position:absolute;top:0;left:0;right:0;transform:scaleY(-1);}
-.ph .rf .in img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-.ph .rf::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(255,255,255,.5),#fff 78%);}
+.ph .rf img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 table.price{width:100%;border-collapse:collapse;margin:4pt 0 4pt;font-size:10pt;}
 /* equal tier columns: fixed layout splits the space left by the label column evenly between
    them, however many there are. Without it the browser sizes each column to its contents, so
@@ -984,7 +984,7 @@ function loadPhotoFiles(files, done){
     r.onload=()=>downscale(r.result,1400,0.82,out=>{
       // remember the shape so the frame and its reflection keep the photo's own proportions
       const probe=new Image();
-      const add=ar=>{ slots[i]={src:out, ar}; fin(); };
+      const add=ar=>bakeReflection(out, rfl=>{ slots[i]={src:out, ar, rfl}; fin(); });
       probe.onload=()=>add(probe.naturalWidth?probe.naturalHeight/probe.naturalWidth:0.666);
       probe.onerror=()=>add(0.666);
       probe.src=out;
@@ -1059,10 +1059,50 @@ const aboutClusters = () => clusterPhotos(aboutPhotos);
 // reflection are both driven by the photo's stored aspect ratio.
 const phAr = p => (+p.ar>0 ? +p.ar : 0.666);
 const phFrame = (p,style)=>{ const ar=(phAr(p)*100).toFixed(2);
+  // the box is emitted either way so the height the paginator measured doesn't change once a
+  // reflection that is still being baked arrives
   return `<div class="pi"${style?` style="${style}"`:''}>
     <div class="fr" style="padding-bottom:${ar}%;"><img src="${p.src}"></div>
-    <div class="rf"><div class="in" style="padding-bottom:${ar}%;"><img src="${p.src}"></div></div>
+    <div class="rf">${p.rfl?`<img src="${p.rfl}">`:''}</div>
   </div>`; };
+// Safari prints the reflection's CSS gradient as a solid white fill, which hides the reflection
+// completely — the exported PDF shows an empty panel under the photo. The cover's duotone was baked
+// into its image for the same reason, so the reflection is baked too: the bottom strip of the photo,
+// mirrored, with the fade to white already in the pixels. What prints is then an ordinary <img> —
+// no transform, no clipping and no gradient left for the printer to lose.
+function bakeReflection(src, cb){
+  const img=new Image();
+  img.onload=()=>{ try{
+    const iw=img.naturalWidth||1, ih=img.naturalHeight||1;
+    const W=Math.min(700, iw), H=Math.max(1, Math.round(W*PH_REFLECT));
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);   // opaque: the fade is to the page's own white
+    // the strip that shows is as deep as PH_REFLECT of the photo's width, taken off the bottom and
+    // flipped, so the photo's last row sits against the join
+    const sliceH=Math.min(ih, iw*PH_REFLECT);
+    ctx.save(); ctx.translate(0,H); ctx.scale(1,-1);
+    ctx.drawImage(img, 0, ih-sliceH, iw, sliceH, 0, 0, W, H);
+    ctx.restore();
+    const grad=ctx.createLinearGradient(0,0,0,H);   // the same fade the CSS used to draw
+    grad.addColorStop(0,'rgba(255,255,255,0.5)');
+    grad.addColorStop(0.78,'#fff');
+    ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+    cb(c.toDataURL('image/jpeg',0.8));
+  }catch(err){ cb(null); } };
+  img.onerror=()=>cb(null);
+  img.src=src;
+}
+// every photo in the document, wherever it lives
+const allPhotos = ()=>aboutPhotos.concat(
+  customs.reduce((a,c)=>a.concat((c.blocks||[]).filter(b=>b.t==='photo')),[]));
+// drafts saved before the reflection was baked hold photos without one
+function ensureReflections(){
+  const todo=allPhotos().filter(p=>p.src && !p.rfl);
+  if(!todo.length) return;
+  let left=todo.length;
+  todo.forEach(p=>bakeReflection(p.src, rfl=>{ if(rfl) p.rfl=rfl; if(!--left) render(); }));
+}
 function photoHTML(group){
   const g = Array.isArray(group) ? group : [group], p0 = g[0];
   // the float takes the width of the largest photo in the group
@@ -1884,7 +1924,7 @@ function applyState(st){
   document.getElementById('i-cover').value='';
   syncAdhocField();
   renderToggles(); renderCustoms(); renderKeyAspects(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
-  refreshCover();
+  refreshCover(); ensureReflections();
 }
 function loadStore(){
   try{ drafts=JSON.parse(localStorage.getItem(DKEY))||[]; }catch(e){ drafts=[]; }
@@ -2105,7 +2145,7 @@ if(drafts.length){
 }else{
   syncAdhocField(); syncCustomSections();
   renderToggles(); renderCustoms(); renderKeyAspects(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
-  document.getElementById('i-date').value=todayStr(); render(); refreshCover();
+  document.getElementById('i-date').value=todayStr(); render(); refreshCover(); ensureReflections();
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
 renderDrafts();
