@@ -49,6 +49,9 @@ label.f input:focus,label.f textarea:focus,label.f select:focus,.cg-gr input:foc
 .toggle .brk input{width:13px;height:13px;}
 .toggle .brk.on{color:var(--blue);}
 .toggle .drag{margin-left:8px;}
+/* only bespoke sections carry this — a built-in section is switched off, never deleted */
+.toggle .del{margin-left:8px;color:#8a93c9;cursor:pointer;font-size:13px;line-height:1;}
+.toggle .del:hover{color:#c0392b;}
 .toggle.dragging{opacity:.5;}
 .toggle.over{border-color:var(--blue);}
 .hint{font-size:10.5px;color:#7d8fce;line-height:1.5;margin:2px 0 0;}
@@ -601,8 +604,12 @@ function renderToggles(){
     el.innerHTML = `<input type="checkbox" ${s.on?'checked':''}><span>${s.name}</span>`
       + `<span class="brk${s.brk?' on':''}" title="Start this section on a new page">`
       + `<input type="checkbox" class="brk-x"${s.brk?' checked':''}>New page</span>`
-      + `<span class="drag">⋮⋮</span>`;
+      + `<span class="drag">⋮⋮</span>`
+      + (s.custom?`<span class="del" title="Delete this bespoke section">✕</span>`:'');
     el.querySelector('input').onchange=e=>{s.on=e.target.checked;render();};
+    // the row is a <label>, so the ✕ has to swallow the click or it ticks the section too
+    const del=el.querySelector('.del');
+    if(del) del.onclick=e=>{ e.preventDefault(); e.stopPropagation(); removeCustom(id); };
     const brk=el.querySelector('.brk-x');
     brk.onclick=e=>e.stopPropagation();          // the row is a <label>, so don't toggle "include" too
     brk.onchange=e=>{ s.brk=e.target.checked; renderToggles(); render(); };
@@ -662,6 +669,16 @@ function syncCustomSections(){
   });
 }
 const customOpen = new Set();   // which bespoke panels are expanded, kept across re-renders
+// Deleting a bespoke section throws its content away, so it always asks first. Both places that
+// offer it — the ✕ in the tick list and the button inside the section's own panel — come through
+// here, so they behave identically. syncCustomSections drops it from SECTIONS and the order.
+function removeCustom(id){
+  const i=customs.findIndex(c=>c.id===id); if(i<0) return;
+  const name=(customs[i].title||'').trim()||'this bespoke section';
+  if(!confirm('Remove “'+name+'”? Its content is deleted and this cannot be undone.\n\nTo keep the content but leave it out of the proposal, untick it instead.')) return;
+  customOpen.delete(id); customs.splice(i,1);
+  syncCustomSections(); renderCustoms(); renderToggles(); render();
+}
 document.getElementById('add-custom').onclick=()=>{
   const c={id:'c'+uid(), title:'BESPOKE SECTION',
     blocks:[{t:'p', text:'Add your bespoke content here — it inherits the same on-brand styling automatically.'}]};
@@ -670,10 +687,10 @@ document.getElementById('add-custom').onclick=()=>{
 };
 // Each bespoke section gets its own collapsible panel, the same furniture as Portfolio or Next
 // Steps. Its contents belong there rather than in the tick list, which is only about what the
-// proposal includes and in what order.
+// proposal includes, in what order, and — for bespoke sections — whether it exists at all.
 function renderCustoms(){
   const w=document.getElementById('custom-groups'); if(!w) return; w.innerHTML='';
-  customs.forEach((c,i)=>{
+  customs.forEach(c=>{
     const g=document.createElement('div');
     g.className='grp collapsible'+(customOpen.has(c.id)?' open':'');
     g.innerHTML=`<h4><span class="cg-name"></span><span class="chev">▶</span></h4>
@@ -696,10 +713,7 @@ function renderCustoms(){
       name.textContent=(c.title||'').trim()||'Bespoke section';
       syncCustomSections(); renderToggles(); render();
     };
-    g.querySelector('.cg-del').onclick=()=>{
-      customOpen.delete(c.id); customs.splice(i,1);
-      syncCustomSections(); renderCustoms(); renderToggles(); render();
-    };
+    g.querySelector('.cg-del').onclick=()=>removeCustom(c.id);
     g.querySelectorAll('.cg-add button').forEach(b=>{ b.onclick=()=>addCustomBlock(c, b.dataset.t); });
     renderCustomBlocks(c, g.querySelector('.cg-blocks'));
     w.appendChild(g);
