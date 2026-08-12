@@ -362,6 +362,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <div id="ret-tiers"></div>
       <button class="btn ghost" id="add-tier">+ Add tier</button>
       <p class="hint">Each tier is a column. Drag the grip to reorder; the left-most tier is the baseline for “Saving” when Ad Hoc is off.</p>
+      <label class="f" style="margin:14px 0 5px;">Extras (optional) — monthly charges added under the table, e.g. travel expenses</label>
+      <div id="ret-extras"></div>
+      <button class="btn ghost" id="add-retextra">+ Add extra</button>
+      <div class="row" style="margin-top:11px;">
+        <label class="f">Subtotal row label<input type="text" id="i-ret-sublabel" value="Subtotal"></label>
+        <label class="f">Total row label<input type="text" id="i-ret-totlabel" value="Total Investment"></label>
+      </div>
+      <p class="hint">Add an extra and the table gains a subtotal, the extras, then the grand total in the blue banner. The same amount applies to every tier column; Ad Hoc shows a dash.</p>
       <div class="calc" id="calc-out"></div>
       <div class="row" style="margin-top:10px;">
         <label class="f">Videographer day (£)<input type="number" id="r-dop" value="550"></label>
@@ -380,7 +388,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-disc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-disc-val" value="0"></label>
       </div>
-      <label class="f" style="margin-top:10px;">Total row label<input type="text" id="i-quote-totlabel" value="Total Investment"></label>
+      <label class="f" style="margin:14px 0 5px;">Extras (optional) — added under the total, e.g. travel expenses</label>
+      <div id="quote-extras"></div>
+      <button class="btn ghost" id="add-quoteextra">+ Add extra</button>
+      <div class="row" style="margin-top:11px;">
+        <label class="f">Subtotal row label<input type="text" id="i-quote-sublabel" value="Subtotal"></label>
+        <label class="f">Total row label<input type="text" id="i-quote-totlabel" value="Total Investment"></label>
+      </div>
+      <p class="hint">With no extras the total prints in the blue banner as it always has. Add one and the banner moves to the bottom as the grand total, with the subtotal above it.</p>
       <div class="calc" id="quote-out"></div>
       <label class="f" style="margin:14px 0 5px;">Cost explanations (optional) — “- ” starts a bullet, “| a | b |” a table row</label>
       <div id="quote-notes"></div>
@@ -410,7 +425,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-optdisc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-optdisc-val" value="0"></label>
       </div>
-      <label class="f" style="margin-top:10px;">Total row label<input type="text" id="i-opt-totlabel" value="Total Investment"></label>
+      <label class="f" style="margin:14px 0 5px;">Extras (optional) — added under the total, e.g. travel expenses</label>
+      <div id="opt-extras"></div>
+      <button class="btn ghost" id="add-optextra">+ Add extra</button>
+      <div class="row" style="margin-top:11px;">
+        <label class="f">Subtotal row label<input type="text" id="i-opt-sublabel" value="Subtotal"></label>
+        <label class="f">Total row label<input type="text" id="i-opt-totlabel" value="Total Investment"></label>
+      </div>
+      <p class="hint">An extra takes a value per column, so travel can differ by tier. With no extras the total prints in the blue banner as it always has; add one and the banner moves to the bottom as the grand total.</p>
       <label class="toggle" style="margin:12px 0 2px;"><input type="checkbox" id="chk-optpervid"><span>Show a price per video under the total</span></label>
       <div id="opt-pervid" style="display:none;">
         <label class="f" style="margin-top:9px;">Row label<input type="text" id="i-opt-pvlabel" value="Price per video"></label>
@@ -568,6 +590,15 @@ let optTotals = {};  // manual per-tier total override (blank = auto-sum of nume
 let optLabels = {};  // per-tier column title override (blank = the ladder name itself)
 let optPerVid = false;     // show a price-per-video row beneath the Quote Options total
 let optVids = {};    // videos included per tier — divides that column's total
+// Extras are charges added under a pricing table's total — travel, accommodation, anything
+// scoped after the line items. Adding one demotes the blue total row to a subtotal (the light
+// "rate" style already used for it) and prints a fresh blue banner underneath carrying the
+// grand total. No extras, no change: the table looks exactly as it always did.
+// The quote and retainer tables have a single value column, so an extra there is one amount;
+// Quote Options has a column per tier, so its extras hold a value each, like optRows.
+let quoteExtras = [];  // {label, amount}          — project quote (one-off)
+let optExtras   = [];  // {label, vals:{tier:val}} — quote options (comparison)
+let retExtras   = [];  // {label, amount}          — monthly retainer, per month
 // interpret a typed cell: blank -> dash, tick words -> '✓', a pure number -> price,
 // anything else -> kept as free text so a cell can read e.g. "2 rounds" or "Bespoke"
 function parseCell(raw){
@@ -589,6 +620,16 @@ function cellDisplay(v){
   return '—';
 }
 function optTotal(c){ return (isNum(optTotals[c])) ? optTotals[c] : optRows.reduce((s,r)=>s+(isNum(r.vals[c])?+r.vals[c]:0),0); }
+// An extras row only counts once something has been typed into it, so the blank row left behind
+// by "+ Add extra" doesn't split the total into a subtotal before it has been filled in.
+const extraFilled = e => !!(e && ((e.label||'').trim() || isNum(e.amount)
+  || (e.vals && Object.values(e.vals).some(v=>v!==undefined && v!==''))));
+const extrasLive = arr => (arr||[]).filter(extraFilled);
+const extrasSum = arr => extrasLive(arr).reduce((s,e)=>s+(isNum(e.amount)?+e.amount:0),0);
+// per-tier, mirroring optTotal: ✓, free text and # counts display but never sum
+const optExtraFor = c => extrasLive(optExtras).reduce((s,e)=>s+(isNum(e.vals&&e.vals[c])?+e.vals[c]:0),0);
+// the label printed on the demoted row; only ever shown when a table has extras under it
+const subLabel = id => val(id).trim() || 'Subtotal';
 let terms = DEFAULT_TERMS.map(t=>({...t}));
 let retainerTerms = DEFAULT_RETAINER_TERMS.map(t=>({...t}));
 let chkRetTerms = false;
@@ -1181,6 +1222,7 @@ function renderRetTiers(){
     w.appendChild(d);
   });
   makeDraggable(w, retTiers, renderRetTiers);
+  renderExtraList(retExtras, 'ret-extras', renderRetTiers, null);
 }
 function syncAdhocField(){ const f=document.getElementById('adhoc-rate-f'); if(f) f.style.display=retAdhocOn?'':'none'; }
 document.getElementById('add-tier').onclick=()=>{
@@ -1216,9 +1258,13 @@ function renderQuote(){
     w.appendChild(d);
   });
   makeDraggable(w, quoteItems, renderQuote);
+  renderExtraList(quoteExtras, 'quote-extras', renderQuote, null);
   renderNoteList(quoteNotes, 'quote-notes', renderQuote);
 }
 document.getElementById('add-quotenote').onclick=()=>{ quoteNotes.push({label:'',text:''}); renderQuote(); render(); };
+document.getElementById('add-quoteextra').onclick=()=>{ quoteExtras.push({label:'Travel expenses'}); renderQuote(); render(); };
+document.getElementById('add-retextra').onclick=()=>{ retExtras.push({label:'Travel expenses'}); renderRetTiers(); render(); };
+document.getElementById('add-optextra').onclick=()=>{ optExtras.push({label:'Travel expenses', vals:{}}); renderOptions(); render(); };
 document.getElementById('chk-quotedays').onchange=e=>{ showQuoteDays=e.target.checked; render(); };
 document.getElementById('chk-eqcols').onchange=e=>{ optEqCols=e.target.checked; render(); };
 document.getElementById('chk-optpervid').onchange=e=>{ optPerVid=e.target.checked; renderOptions(); render(); };
@@ -1227,7 +1273,7 @@ document.getElementById('chk-optpervid').onchange=e=>{ optPerVid=e.target.checke
 // the value editors caption each box with the column's printed title, so retitling a column
 // renames its boxes too. Only the title editor stays captioned by the ladder rung.
 function syncColCaptions(){
-  ['opt-rows','opt-totals','opt-vids'].forEach(id=>{
+  ['opt-rows','opt-totals','opt-vids','opt-extras'].forEach(id=>{
     const w=document.getElementById(id); if(!w) return;
     w.querySelectorAll('label.f > input[data-t]').forEach(inp=>{
       const cap=inp.parentElement.firstChild;
@@ -1299,7 +1345,31 @@ function renderOptions(){
       vw.querySelectorAll('.ovid').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value.trim(); if(v==='') delete optVids[t]; else optVids[t]=parseFloat(v)||0; render(); }; });
     }
   }
+  renderExtraList(optExtras, 'opt-extras', renderOptions, optCols());
   renderNoteList(optNotes, 'opt-notes', renderOptions);
+}
+// shared extras editor. A single-value table (project quote, retainer) gets one amount box; Quote
+// Options passes its tier columns and gets a box each, parsed exactly like the category cells above.
+function renderExtraList(arr, elId, rerender, cols){
+  const w=document.getElementById(elId); if(!w) return; w.innerHTML='';
+  arr.forEach((e,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    const cells = cols
+      ? cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(colLabel(c))}<input type="text" class="xv" data-t="${esc(c)}" value="${String((e.vals&&e.vals[c]!==undefined)?e.vals[c]:'').replace(/"/g,'&quot;')}" placeholder="—"></label>`).join('')
+      : `<label class="f" style="flex:1;margin-bottom:0;">Amount (£)<input type="number" class="xa" value="${isNum(e.amount)?e.amount:''}" placeholder="—"></label>`;
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+      <label class="f">Description<input type="text" class="xl" value="${(e.label||'').replace(/"/g,'&quot;')}"></label>
+      <div class="row" style="flex-wrap:wrap;gap:7px;">${cells||'<span class="hint">Tick a column above first.</span>'}</div>`;
+    d.querySelector('.x').onclick=()=>{arr.splice(i,1);rerender();render();};
+    d.querySelector('.xl').oninput=ev=>{e.label=ev.target.value;render();};
+    const amt=d.querySelector('.xa');
+    if(amt) amt.oninput=ev=>{ const v=ev.target.value.trim(); if(v==='') delete e.amount; else e.amount=parseFloat(v.replace(/[£,]/g,''))||0; render(); };
+    d.querySelectorAll('.xv').forEach(inp=>{ inp.oninput=ev=>{ e.vals=e.vals||{};
+      const t=ev.target.dataset.t, pv=parseCell(ev.target.value);
+      if(pv===undefined) delete e.vals[t]; else e.vals[t]=pv; render(); }; });
+    w.appendChild(d);
+  });
+  makeDraggable(w, arr, rerender);
 }
 // shared cost-explanation editor (used by Quote Options and Project Quote)
 function renderNoteList(arr, elId, rerender){
@@ -1514,14 +1584,19 @@ function quoteCalc(){
   const subtotal=quoteItems.reduce((s,it)=>s+((+it.rate||0)*(+it.days||0)),0);
   const type=val('i-disc-type'), dv=num('i-disc-val');
   const discAmount = type==='pct' ? subtotal*dv/100 : dv;
-  const grand = Math.max(0, subtotal-discAmount);
-  return {subtotal, discType:type, discVal:dv, discAmount, grand, discLabel:val('i-disc-label')};
+  // net is the line items after any discount — the figure the total row carried before extras
+  // existed. With extras it becomes the subtotal, and grand is what the client actually pays.
+  const net = Math.max(0, subtotal-discAmount);
+  const extras = extrasLive(quoteExtras), extrasTotal = extrasSum(quoteExtras);
+  return {subtotal, discType:type, discVal:dv, discAmount, net, extras, extrasTotal,
+          grand: net+extrasTotal, discLabel:val('i-disc-label')};
 }
 function renderQuoteCalc(){
   const el=document.getElementById('quote-out'); if(!el) return;
   const q=quoteCalc();
   const dtxt = q.discAmount>0 ? ` · ${esc(q.discLabel)} −<b>${gbp(q.discAmount)}</b>` : '';
-  el.innerHTML=`Subtotal <b>${gbp(q.subtotal)}</b>${dtxt}<br>Grand total <b>${gbp(q.grand)}</b> · ${quoteItems.length} line${quoteItems.length===1?'':'s'}`;
+  const xtxt = q.extras.length ? ` · extras <b>${gbp(q.extrasTotal)}</b>` : '';
+  el.innerHTML=`Subtotal <b>${gbp(q.subtotal)}</b>${dtxt}${xtxt}<br>Grand total <b>${gbp(q.grand)}</b> · ${quoteItems.length} line${quoteItems.length===1?'':'s'}`;
 }
 
 // ---- section renderers ----
@@ -1568,6 +1643,15 @@ function secHTML(id){
    case 'scope': { const t=c.tiers, hasAd=c.adhocOn;
       const savLabel = hasAd ? 'Saving vs ad hoc' : `Saving vs ${c.baseVideos} / month`;
       const savCell = x => (x.isBase || x.sav<=0) ? '<td class="c">—</td>' : `<td class="c save">Save ${gbp(x.sav)}/mo</td>`;
+      // Extras are monthly charges added under the table. The retainer has no total row of its own,
+      // so one appears with them: the monthly price restated as a subtotal (the price row sits three
+      // rows up, past the derived ones), the extras, then the blue banner carrying the grand total.
+      // Ad Hoc is a per-video rate rather than a monthly price, so extras don't apply to it.
+      const xt=extrasLive(retExtras), xsum=extrasSum(retExtras);
+      const adCell = hasAd ? '<td class="c">—</td>' : '';
+      const extraRows = xt.length ? `<tr class="rate"><th class="rh">${esc(subLabel('i-ret-sublabel'))}</th>${adCell}${t.map(x=>`<td class="c">${gbp(x.price)}/mo</td>`).join('')}</tr>`
+        + xt.map(e=>`<tr><th class="rh">${esc(e.label)}</th>${adCell}${t.map(()=>`<td class="c">${isNum(e.amount)?gbp(e.amount)+'/mo':'—'}</td>`).join('')}</tr>`).join('')
+        + `<tr class="total"><td>${esc(totLabel('i-ret-totlabel'))}</td>${hasAd?'<td class="c">—</td>':''}${t.map(x=>`<td class="c">${gbp(x.price+xsum)}/mo</td>`).join('')}</tr>` : '';
       return `<div class="bar mt">MONTHLY RETAINER OPTIONS</div>
       <table class="price"><thead><tr>
         <th class="rh">&nbsp;</th>${hasAd?'<th class="c">Ad Hoc</th>':''}${t.map(x=>`<th class="c">${x.videos} / month</th>`).join('')}
@@ -1575,6 +1659,7 @@ function secHTML(id){
         <tr><th class="rh">${esc(c.label)}</th>${hasAd?`<td class="c">${gbp(c.rate)}/video</td>`:''}${t.map(x=>`<td class="c">${gbp(x.price)}/mo</td>`).join('')}</tr>
         <tr class="rate"><th class="rh">Effective rate per video</th>${hasAd?`<td class="c">${gbp(c.rate)}</td>`:''}${t.map(x=>`<td class="c">${gbp(x.eff)}</td>`).join('')}</tr>
         ${c.showSav?`<tr><th class="rh">${savLabel}</th>${hasAd?'<td class="c">—</td>':''}${t.map(savCell).join('')}</tr>`:''}
+        ${extraRows}
       </tbody></table>
       <p class="note">${VAT_NOTE}</p>`; }
    case 'quote': return priceSectionHTML(quoteParts());
@@ -1642,9 +1727,11 @@ function quoteParts(){
       + (val('i-quoteintro').trim()?`<p>${esc(val('i-quoteintro'))}</p>`:''),
     thead: `<thead><tr><th>Category</th><th>Description</th>${sd?'<th class="c">Day rate</th><th class="c">Days</th>':''}<th class="c">Total</th></tr></thead>`,
     rows: quoteItems.map(it=>`<tr><th class="rh">${esc(it.cat)}</th><td>${esc(it.desc)}</td>${sd?`<td class="c">${gbp(it.rate)}</td><td class="c">${(+it.days||0)}</td>`:''}<td class="c">${gbp((+it.rate||0)*(+it.days||0))}</td></tr>`),
-    // subtotal / discount / total always travel together as one indivisible group
+    // subtotal / discount / extras / total always travel together as one indivisible group
     summary: (q.discAmount>0?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:left;">Subtotal</th><td class="c">${gbp(q.subtotal)}</td></tr>
         <tr><td colspan="${span}" style="text-align:left;">${esc(q.discLabel)}${q.discType==='pct'?` (${q.discVal}%)`:''}</td><td class="c save">−${gbp(q.discAmount)}</td></tr>`:'')
+      + (q.extras.length?`<tr class="rate"><th class="rh" colspan="${span}" style="text-align:left;">${esc(subLabel('i-quote-sublabel'))}</th><td class="c">${gbp(q.net)}</td></tr>`
+        + q.extras.map(e=>`<tr><td colspan="${span}" style="text-align:left;">${esc(e.label)}</td><td class="c">${isNum(e.amount)?gbp(e.amount):'—'}</td></tr>`).join(''):'')
       + `<tr class="total"><td colspan="${span}" style="text-align:left;">${esc(totLabel('i-quote-totlabel'))}</td><td class="c">${gbp(q.grand)}</td></tr>`,
     vat: `<p class="note">${VAT_NOTE}</p>`,
     notes: notesListFor(quoteNotes)
@@ -1656,9 +1743,13 @@ function optionsParts(){
   const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
   const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
   const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
-  // the price per video divides what the client actually pays, so it comes off the discounted total.
-  // A column with no video count shows a dash rather than a made-up figure.
-  const perVid=c=>{ const n=+optVids[c]; return (isNum(optVids[c]) && n>0) ? gbp((hasDisc?grandFor(c):optTotal(c))/n) : '—'; };
+  // net is that column after any discount; with extras under it, net becomes the subtotal
+  const netFor=c=>hasDisc?grandFor(c):optTotal(c);
+  const extras=extrasLive(optExtras);
+  const finalFor=c=>netFor(c)+optExtraFor(c);
+  // the price per video divides what the client actually pays, so it comes off the discounted total
+  // and includes any extras. A column with no video count shows a dash rather than a made-up figure.
+  const perVid=c=>{ const n=+optVids[c]; return (isNum(optVids[c]) && n>0) ? gbp(finalFor(c)/n) : '—'; };
   const showPerVid = optPerVid && cols.some(c=>isNum(optVids[c]) && +optVids[c]>0);
   return {
     tableClass: optEqCols ? ' eqcols' : '',
@@ -1666,10 +1757,12 @@ function optionsParts(){
       + (val('i-optintro').trim()?`<p>${esc(val('i-optintro'))}</p>`:''),
     thead: `<thead><tr><th class="rh">&nbsp;</th>${cols.map(c=>`<th class="c">${esc(colLabel(c))}</th>`).join('')}</tr></thead>`,
     rows: optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`),
-    // subtotal / discount / total always travel together as one indivisible group
+    // subtotal / discount / extras / total always travel together as one indivisible group
     summary: (hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
         <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:'')
-      + `<tr class="total"><td>${esc(totLabel('i-opt-totlabel'))}</td>${cols.map(c=>`<td class="c">${gbp(hasDisc?grandFor(c):optTotal(c))}</td>`).join('')}</tr>`
+      + (extras.length?`<tr class="rate"><th class="rh">${esc(subLabel('i-opt-sublabel'))}</th>${cols.map(c=>`<td class="c">${gbp(netFor(c))}</td>`).join('')}</tr>`
+        + extras.map(e=>`<tr><th class="rh">${esc(e.label)}</th>${cols.map(c=>`<td class="c">${cellDisplay(e.vals&&e.vals[c])}</td>`).join('')}</tr>`).join(''):'')
+      + `<tr class="total"><td>${esc(totLabel('i-opt-totlabel'))}</td>${cols.map(c=>`<td class="c">${gbp(finalFor(c))}</td>`).join('')}</tr>`
       + (showPerVid?`<tr class="rate"><th class="rh">${esc(perVidLabel())}</th>${cols.map(c=>`<td class="c">${perVid(c)}</td>`).join('')}</tr>`:''),
     vat: `<p class="note">${VAT_NOTE}</p>`,
     notes: notesListFor(optNotes)
@@ -1860,7 +1953,8 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-opt-pvlabel','i-signoff'];
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-opt-pvlabel','i-signoff',
+  'i-quote-sublabel','i-opt-sublabel','i-ret-sublabel','i-ret-totlabel'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -1874,6 +1968,7 @@ function snapshot(){
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
           optLabels:clone(optLabels), optPerVid, optVids:clone(optVids),
           quoteNotes:clone(quoteNotes), showQuoteDays, optEqCols,
+          quoteExtras:clone(quoteExtras), optExtras:clone(optExtras), retExtras:clone(retExtras),
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
           coverIsDefault, coverSrc: coverIsDefault?null:coverSrc};
 }
@@ -1910,8 +2005,13 @@ function applyState(st){
   // older drafts have no row label stored — fall back to the default rather than a stale value
   if(!(st.inputs && 'i-retlabel' in st.inputs)) document.getElementById('i-retlabel').value='Short-form lifestyle video';
   // likewise the editable total row, added later than the drafts that predate it
-  ['i-quote-totlabel','i-opt-totlabel'].forEach(id=>{
+  ['i-quote-totlabel','i-opt-totlabel','i-ret-totlabel'].forEach(id=>{
     if(!(st.inputs && id in st.inputs)) document.getElementById(id).value='Total Investment';
+  });
+  // likewise the subtotal labels, added with extras — a draft that predates them must not inherit
+  // whatever the last-loaded draft happened to leave in the field
+  ['i-quote-sublabel','i-opt-sublabel','i-ret-sublabel'].forEach(id=>{
+    if(!(st.inputs && id in st.inputs)) document.getElementById(id).value='Subtotal';
   });
   if(!(st.inputs && 'i-opt-pvlabel' in st.inputs)) document.getElementById('i-opt-pvlabel').value='Price per video';
   if(!(st.inputs && 'i-signoff' in st.inputs)) document.getElementById('i-signoff').value=SIGNOFFS[0];
@@ -1925,6 +2025,10 @@ function applyState(st){
   document.getElementById('chk-optpervid').checked = optPerVid;
   optNotes = Array.isArray(st.optNotes) ? clone(st.optNotes) : [];
   quoteNotes = Array.isArray(st.quoteNotes) ? clone(st.quoteNotes) : [];
+  // drafts saved before extras existed simply have none, and print exactly as they did
+  quoteExtras = Array.isArray(st.quoteExtras) ? clone(st.quoteExtras) : [];
+  optExtras   = Array.isArray(st.optExtras)   ? clone(st.optExtras)   : [];
+  retExtras   = Array.isArray(st.retExtras)   ? clone(st.retExtras)   : [];
   showQuoteDays = st.showQuoteDays!==false;
   document.getElementById('chk-quotedays').checked = showQuoteDays;
   optEqCols = st.optEqCols!==false;
@@ -2273,6 +2377,14 @@ function aiState(){
     discounts: {
       quote:   {label:val('i-disc-label'),    type:val('i-disc-type'),    amount:num('i-disc-val')},
       options: {label:val('i-optdisc-label'), type:val('i-optdisc-type'), amount:num('i-optdisc-val')}
+    },
+    // read-only context: charges added under each table's total. There is no tool for these, so
+    // the assistant can see the figures add up but can't edit them — say so if asked to change one.
+    extras: {
+      quote:    extrasLive(quoteExtras).map(e=>({label:e.label, amount:e.amount})),
+      options:  extrasLive(optExtras).map(e=>({label:e.label,
+        values:Object.fromEntries(optCols().filter(c=>e.vals&&e.vals[c]!==undefined).map(c=>[colLabel(c), e.vals[c]]))})),
+      retainer: extrasLive(retExtras).map(e=>({label:e.label, amount_per_month:e.amount}))
     },
     key_terms: terms.map((t,i)=>({index:i, heading:t.h, body:t.b})),
     retainer_terms: retainerTerms.map((t,i)=>({index:i, heading:t.h, body:t.b})),
