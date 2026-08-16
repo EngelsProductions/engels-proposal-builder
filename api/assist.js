@@ -18,7 +18,8 @@ const client = new Anthropic();
 
 const FIELDS = [
   "client", "title", "date", "version", "opening_line", "about_body",
-  "key_aspects_intro", "quote_options_intro", "project_quote_intro",
+  "key_aspects_lead_in", "key_aspects_intro",
+  "quote_options_intro", "project_quote_intro",
   "retainer_note", "next_steps", "portfolio_intro", "portfolio_url",
   "portfolio_link_label", "retainer_row_label", "ad_hoc_rate",
   "day_rate_dop", "day_rate_editor",

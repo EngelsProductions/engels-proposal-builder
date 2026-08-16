@@ -340,10 +340,11 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
 
     <div class="grp">
       <h4>Key aspects of this project</h4>
+      <label class="f">Lead-in line<input type="text" id="i-kalead" value="Key aspects of this project:"></label>
       <label class="f">Intro line (optional)<textarea id="i-keyintro"></textarea></label>
       <div id="ka-list"></div>
       <button class="btn ghost" id="add-ka">+ Add key aspect</button>
-      <p class="hint">Drag the grip to reorder. Appears within About This Partnership as a bold “Key aspects of this project:” lead-in, then a light-blue box. Tick “Key Aspects of This Project” above to include it.</p>
+      <p class="hint">Drag the grip to reorder. Appears within About This Partnership as the bold lead-in above, then a light-blue box. Leave the lead-in blank to print the box on its own. Tick “Key Aspects of This Project” above to include it.</p>
     </div>
 
     <div class="grp">
@@ -1621,7 +1622,9 @@ function secHTML(id){
    case 'about': return ABOUT_BAR + (aboutPhotos.length
       ? aboutChunks().map(c=>`<div class="abt">${c}</div>`).join('')
       : aboutChunks().join(''));
-   case 'keyaspects': return `<p class="klead">Key aspects of this project:</p>
+   // the lead-in is editable so it can read "of this retainer", "of this shoot" and so on;
+   // blank prints the callout on its own
+   case 'keyaspects': return `${val('i-kalead').trim()?`<p class="klead">${esc(val('i-kalead'))}</p>`:''}
       ${val('i-keyintro').trim()?`<p>${esc(val('i-keyintro'))}</p>`:''}
       <div class="callout">
         ${keyAspects.map(a=>`<p><span class="k">${esc(a.k)}:</span> ${esc(a.v)}</p>`).join('')}
@@ -1954,7 +1957,7 @@ function availablePageHeight(){
 
 // ================= DRAFTS — saved to this browser =================
 const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-opt-pvlabel','i-signoff',
-  'i-quote-sublabel','i-opt-sublabel','i-ret-sublabel','i-ret-totlabel'];
+  'i-quote-sublabel','i-opt-sublabel','i-ret-sublabel','i-ret-totlabel','i-kalead'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -2013,6 +2016,9 @@ function applyState(st){
   ['i-quote-sublabel','i-opt-sublabel','i-ret-sublabel'].forEach(id=>{
     if(!(st.inputs && id in st.inputs)) document.getElementById(id).value='Subtotal';
   });
+  // the key-aspects lead-in used to be hard-coded; a draft saved before it became a field
+  // must get the wording it was printing, not whatever the last-loaded draft left behind
+  if(!(st.inputs && 'i-kalead' in st.inputs)) document.getElementById('i-kalead').value='Key aspects of this project:';
   if(!(st.inputs && 'i-opt-pvlabel' in st.inputs)) document.getElementById('i-opt-pvlabel').value='Price per video';
   if(!(st.inputs && 'i-signoff' in st.inputs)) document.getElementById('i-signoff').value=SIGNOFFS[0];
   optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
@@ -2290,7 +2296,8 @@ document.querySelector('.panel > .grp.collapsible')?.classList.add('open');
 // Every run snapshots the draft first, so any change can be undone in one click.
 const AI_FIELDS = {
   client:'i-client', title:'i-title', date:'i-date', version:'i-version',
-  opening_line:'i-lead', about_body:'i-about', key_aspects_intro:'i-keyintro',
+  opening_line:'i-lead', about_body:'i-about',
+  key_aspects_lead_in:'i-kalead', key_aspects_intro:'i-keyintro',
   quote_options_intro:'i-optintro', project_quote_intro:'i-quoteintro',
   retainer_note:'i-retainer', next_steps:'i-next', portfolio_intro:'i-portintro',
   portfolio_url:'i-porturl', portfolio_link_label:'i-portlabel',
