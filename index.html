@@ -2224,9 +2224,13 @@ document.getElementById('draft-dup').onclick=duplicateDraft;
 document.getElementById('draft-download').onclick=downloadDraft;
 document.getElementById('draft-import').onchange=e=>{ const f=e.target.files[0]; if(f) importDraft(f); e.target.value=''; };
 
-// wire inputs
-document.querySelectorAll('#i-client,#i-title,#i-date,#i-version,#i-lead,#i-about,#i-keyintro,#i-optintro,#i-quoteintro,#i-retainer,#i-next,#i-portintro,#i-porturl,#i-portlabel,#i-retlabel,#p-adhoc,#r-dop,#r-ed,#i-disc-label,#i-disc-val,#i-optdisc-label,#i-optdisc-val,#i-quote-totlabel,#i-opt-totlabel,#i-opt-pvlabel')
-  .forEach(el=>el.addEventListener('input',render));
+// wire inputs — driven off INPUT_IDS rather than a list repeated here, so a field added to the
+// panel is never left un-wired and silently failing to update the preview. The <select>s in that
+// list take a change handler instead, below.
+const SELECT_IDS=['i-disc-type','i-optdisc-type','i-signoff'];
+INPUT_IDS.filter(id=>!SELECT_IDS.includes(id)).forEach(id=>{
+  const el=document.getElementById(id); if(el) el.addEventListener('input',render);
+});
 // ⌘B / Ctrl+B in any panel text field wraps the selection in **bold** markers
 document.querySelector('.panel').addEventListener('keydown',e=>{
   if(!(e.metaKey||e.ctrlKey) || (e.key||'').toLowerCase()!=='b') return;
@@ -2241,9 +2245,7 @@ document.querySelector('.panel').addEventListener('keydown',e=>{
   el.setSelectionRange(s, wrapped ? en-4 : en+4);
   el.dispatchEvent(new Event('input',{bubbles:true}));
 });
-document.getElementById('i-disc-type').addEventListener('change',render);
-document.getElementById('i-optdisc-type').addEventListener('change',render);
-document.getElementById('i-signoff').addEventListener('change',render);
+SELECT_IDS.forEach(id=>document.getElementById(id).addEventListener('change',render));
 document.getElementById('btn-print').onclick=()=>window.print();
 // the browser names the saved PDF after the document title, so lend it the client's name for the
 // duration of the print and put it back afterwards. Characters a filesystem would choke on are
