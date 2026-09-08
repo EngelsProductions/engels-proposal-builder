@@ -334,7 +334,7 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
       <label class="f" style="margin:14px 0 5px;">Photos (optional)</label>
       <div id="about-photos"></div>
       <label class="f"><input type="file" id="i-aboutphoto" accept="image/*" multiple></label>
-      <p class="hint">Photos sit in the About section with the copy wrapping around them. Drag to reorder; each one can go left or right at three sizes. Tick “Lay over the photo above” to overlap two or more into a single group.</p>
+      <p class="hint">Photos sit in the About section with the copy wrapping around them. Drag to reorder; each one can go left or right at five sizes. Tick “Lay over the photo above” to overlap two or more into a single group.</p>
       <p class="hint"><b>Bold:</b> select text and press ⌘B (Ctrl+B), or wrap it in <b>**double asterisks**</b>. Works in every text box in this panel.</p>
     </div>
 
@@ -582,7 +582,7 @@ let retTiers = DEFAULT_RETTIERS.map(t=>({...t}));   // monthly retainer columns
 let retAdhocOn = true;                              // show the Ad Hoc comparison column
 let optTiers = DEFAULT_OPTTIERS.slice();
 let optRows = DEFAULT_OPTROWS.map(r=>({cat:r.cat, vals:{...r.vals}}));
-let aboutPhotos = []; // optional About photos {src, side:'l'|'r', size:'s'|'m'|'l'}
+let aboutPhotos = []; // optional About photos {src, side:'l'|'r', size:'xxs'|'xs'|'s'|'m'|'l'}
 let optNotes = [];   // cost explanations {label, text} — quote options
 let quoteNotes = []; // cost explanations {label, text} — project quote
 let showQuoteDays = true;  // show the day-rate/days columns on the project quote
@@ -680,8 +680,13 @@ const CBLOCK = {
   bul:   {name:'Bullets',     hint:'One bullet per line.'},
   tbl:   {name:'Table',       hint:'Top row is the heading, first column the row labels. Type a £ amount, “yes” for a ✓, short text, or leave blank for a dash. Prefix a number with # for a plain count — 3 shows as £3, #3 shows as 3.'},
   call:  {name:'Callout box', hint:'One point per line, written as “Label: text”.'},
-  photo: {name:'Photo',       hint:''}
+  photo: {name:'Photo',       hint:''},
+  gap:   {name:'Gap',         hint:'Blank space, to push what follows further down the page.'},
+  brk:   {name:'Page break',  hint:'Everything after this starts on a fresh page.'}
 };
+// a gap's height, in points — the same vocabulary the photo sizes use
+const GAP_H = {s:14, m:28, l:56, xl:112};
+const GAP_SIZES = [['s','Small'],['m','Medium'],['l','Large'],['xl','Extra large']];
 const CBLOCK_SEED = {p:'', sub:'', bul:'',
   tbl:'| Description | Option A | Option B |\n| Item | 350 | 500 |',
   call:'Label: the point you want to make.'};
@@ -771,7 +776,9 @@ function addCustomBlock(c, t){
     });
     return;
   }
-  c.blocks.push({t, text:CBLOCK_SEED[t]||''});
+  const b={t, text:CBLOCK_SEED[t]||''};
+  if(t==='gap') b.size='m';
+  c.blocks.push(b);
   renderCustoms(); render();
 }
 // A table block is still stored as the pipe-per-line text every other table in the document uses,
@@ -866,11 +873,7 @@ function renderCustomBlocks(c, w){
             <option value="l"${b.side==='l'?' selected':''}>Left</option>
             <option value="r"${b.side==='r'?' selected':''}>Right</option>
           </select></label>
-          <label class="f">Size<select class="cb-size">
-            <option value="s"${b.size==='s'?' selected':''}>Small</option>
-            <option value="m"${b.size==='m'?' selected':''}>Medium</option>
-            <option value="l"${b.size==='l'?' selected':''}>Large</option>
-          </select></label>
+          <label class="f">Size<select class="cb-size">${phSizeOptions(b.size)}</select></label>
         </div>` + (prevIsPhoto ? `
         <label class="toggle" style="margin:8px 0 0;"><input type="checkbox" class="cb-ovl"${b.overlap?' checked':''}><span>Lay over the photo above</span></label>
         <label class="f cb-cnr-wrap" style="margin-top:7px;${b.overlap?'':'display:none;'}">Corner<select class="cb-cnr">
@@ -899,6 +902,17 @@ function renderCustomBlocks(c, w){
         render();
       };
       d.querySelector('.cb-totlbl').oninput=e=>{ b.totLabel=e.target.value; render(); };
+    } else if(b.t==='brk'){
+      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+        <label class="f" style="margin-bottom:0;">${CBLOCK.brk.name}</label>
+        <p class="hint" style="margin:5px 0 0;">${CBLOCK.brk.hint}</p>`;
+    } else if(b.t==='gap'){
+      d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+        <label class="f">${CBLOCK.gap.name}<select class="cb-gap">${
+          GAP_SIZES.map(([k,n])=>`<option value="${k}"${(b.size||'m')===k?' selected':''}>${n}</option>`).join('')
+        }</select></label>
+        <p class="hint" style="margin:0;">${CBLOCK.gap.hint}</p>`;
+      d.querySelector('.cb-gap').onchange=e=>{ b.size=e.target.value; render(); };
     } else {
       const meta=CBLOCK[b.t]||CBLOCK.p;
       d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
@@ -946,6 +960,8 @@ function cblockHTML(b){
       return items.length?`<div class="blts">${items.map(t=>`<p>${esc(t)}</p>`).join('')}</div>`:'';
     }
     case 'tbl': return cblockTableHTML(b);
+    case 'gap': return `<div style="height:${GAP_H[b.size]||GAP_H.m}pt;"></div>`;
+    case 'brk': return '';
     case 'call': {
       const pts=(b.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
       if(!pts.length) return '';
@@ -963,9 +979,11 @@ function cblockHTML(b){
 // wrapper so the float is contained; one without keeps plain markup, so its last paragraph's margin
 // still collapses into the next section bar the way it did before.
 function customChunks(c){
-  const chunks=[]; let cur=null;
-  const start=()=>{ cur={photos:[], html:''}; chunks.push(cur); return cur; };
+  const chunks=[]; let cur=null, brk=false;
+  const start=()=>{ cur={photos:[], html:'', brk}; brk=false; chunks.push(cur); return cur; };
   (c.blocks||[]).forEach(b=>{
+    // a page break closes the chunk it sits in; the next one is flagged to open a page of its own
+    if(b.t==='brk'){ cur=null; brk=true; return; }
     if(b.t==='photo'){
       if(!b.src) return;
       if(cur && !cur.html && cur.photos.length && b.overlap) cur.photos.push(b);
@@ -975,10 +993,17 @@ function customChunks(c){
       (cur||start()).html+=h;
     }
   });
-  return chunks.filter(ch=>ch.photos.length||ch.html).map(ch=>{
+  // an empty chunk carries its break forward rather than losing it — two breaks in a row, or a
+  // break with nothing but blank blocks after it, still break exactly once
+  const out=[]; let pend=false;
+  chunks.forEach(ch=>{
+    if(!(ch.photos.length||ch.html)){ pend = pend||ch.brk; return; }
     const inner=(ch.photos.length?photoHTML(ch.photos):'')+ch.html;
-    return ch.photos.length?`<div class="abt">${inner}</div>`:inner;
+    out.push({brk: ch.brk||pend,
+              html: ch.photos.length?`<div class="abt">${inner}</div>`:inner});
+    pend=false;
   });
+  return out;
 }
 // The assistant works in plain text, never blocks and never markup: the same line conventions used
 // elsewhere in the document are parsed into the block stack on the way in, and read back out on the
@@ -1004,9 +1029,10 @@ const customText = c => (c.blocks||[]).map(b=>
   : b.t==='sub'   ? '## '+(b.text||'')
   : b.t==='bul'   ? (b.text||'').split('\n').filter(s=>s.trim()).map(s=>'- '+s.trim()).join('\n')
   : b.t==='call'  ? '[callout box]\n'+(b.text||'')
+  : b.t==='gap' || b.t==='brk' ? ''
   : (b.text||'')
   ).filter(s=>s.trim()).join('\n\n');
-const CB_KEEP = b => b.t==='photo' || b.t==='call';
+const CB_KEEP = b => b.t==='photo' || b.t==='call' || b.t==='gap' || b.t==='brk';
 // swap the text blocks for new ones, in the place the old ones sat, leaving photos and callouts be
 function setCustomText(c, text){
   const blocks=c.blocks||[];
@@ -1017,16 +1043,21 @@ function setCustomText(c, text){
   c.blocks=kept;
 }
 const customBar = c => `<div class="bar mt">${esc((c.title||'').trim()||'Bespoke section')}</div>`;
-const customHTML = c => customBar(c) + customChunks(c).join('');
+const customHTML = c => customBar(c) + customChunks(c).map(ch=>ch.html).join('');
 // each chunk is its own pagination block, so a long bespoke section flows across pages
 function customBlocks(c){
   const chunks=customChunks(c);
   if(!chunks.length) return [{id:c.id, html:customBar(c)}];
-  return chunks.map((html,i)=>({id: i===0?c.id:c.id+'-b'+i, html:(i===0?customBar(c):'')+html}));
+  return chunks.map((ch,i)=>({id: i===0?c.id:c.id+'-b'+i,
+    html:(i===0?customBar(c):'')+ch.html, brk:ch.brk}));
 }
 
 // ---- about photos (optional, float alongside the About copy) ----
-const PH_W = {s:32, m:42, l:52};   // float width as a % of the content column
+const PH_W = {xxs:18, xs:24, s:32, m:42, l:52};   // float width as a % of the content column
+// one list of sizes for both the About photos and the bespoke-section photo blocks
+const PH_SIZES = [['xxs','XXS'],['xs','XS'],['s','Small'],['m','Medium'],['l','Large']];
+const phSizeOptions = v => PH_SIZES.map(([k,n])=>
+  `<option value="${k}"${(v||'m')===k?' selected':''}>${n}</option>`).join('');
 // Shared by About and the bespoke sections. Each file decodes at its own pace, so collect into
 // slots and hand them back in the order they were picked — otherwise a small photo overtakes a
 // large one and the selection comes out shuffled.
@@ -1076,11 +1107,7 @@ function renderAboutPhotos(){
           <option value="l"${p.side==='l'?' selected':''}>Left</option>
           <option value="r"${p.side==='r'?' selected':''}>Right</option>
         </select></label>
-        <label class="f">Size<select class="ph-size">
-          <option value="s"${p.size==='s'?' selected':''}>Small</option>
-          <option value="m"${p.size==='m'?' selected':''}>Medium</option>
-          <option value="l"${p.size==='l'?' selected':''}>Large</option>
-        </select></label>
+        <label class="f">Size<select class="ph-size">${phSizeOptions(p.size)}</select></label>
       </div>` + (i ? `
       <label class="toggle" style="margin:8px 0 0;"><input type="checkbox" class="ph-ovl"${p.overlap?' checked':''}><span>Lay over the photo above</span></label>
       <label class="f ph-cnr-wrap" style="margin-top:7px;${p.overlap?'':'display:none;'}">Corner<select class="ph-cnr">
@@ -1166,7 +1193,7 @@ function photoHTML(group){
   const open = `<div class="ph ${p0.side==='r'?'r':'l'}" style="width:${wide}%;">`;
   if(g.length===1) return open + phFrame(p0,'') + '</div>';
 
-  // Small / Medium / Large keep their relative sizes inside a cluster; the group is then
+  // The sizes keep their relative proportions inside a cluster; the group is then
   // scaled as a whole to fill the float, so one photo can be larger than its neighbour.
   const b = g.map(p=>PH_W[p.size]||PH_W.m);
   const off=[0];
