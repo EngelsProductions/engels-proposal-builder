@@ -18,7 +18,7 @@ const client = new Anthropic();
 
 const FIELDS = [
   "client", "title", "date", "version", "opening_line", "about_body",
-  "key_aspects_lead_in", "key_aspects_intro",
+  "key_aspects_lead_in", "key_aspects_intro", "video_includes_intro",
   "quote_options_intro", "project_quote_intro",
   "retainer_note", "next_steps", "portfolio_intro", "portfolio_url",
   "portfolio_link_label", "retainer_row_label", "ad_hoc_rate",
@@ -37,7 +37,7 @@ const TIERS = ["Essential", "Standard", "Enhanced", "Premium", "Premium+"];
 
 // the lists whose entries can be reordered
 const LISTS = [
-  "key_aspects", "key_terms", "retainer_terms", "project_quote_items",
+  "key_aspects", "video_includes", "key_terms", "retainer_terms", "project_quote_items",
   "project_quote_explanations", "quote_options_rows", "quote_options_explanations",
 ];
 
@@ -146,6 +146,47 @@ const TOOLS = [
   {
     name: "remove_key_aspect",
     description: "Delete a Key Aspects line by its position.",
+    input_schema: {
+      type: "object",
+      properties: {
+        expect: EXPECT,
+        index: { type: "integer" },
+      },
+      required: ["index"],
+    },
+  },
+  {
+    name: "add_video_include",
+    description:
+      "Add a line to the What Each Video Includes callout — the blue box of bold-label-then-text " +
+      "points describing what every video covers.",
+    input_schema: {
+      type: "object",
+      properties: {
+        label: { type: "string", description: "The bold lead-in, a few words." },
+        text: { type: "string", description: "The point itself, one or two sentences." },
+      },
+      required: ["label", "text"],
+    },
+  },
+  {
+    name: "update_video_include",
+    description:
+      "Reword an existing What Each Video Includes line, identified by its position (0 is the first).",
+    input_schema: {
+      type: "object",
+      properties: {
+        expect: EXPECT,
+        index: { type: "integer" },
+        label: { type: "string", description: "New bold lead-in. Omit to leave unchanged." },
+        text: { type: "string", description: "New text. Omit to leave unchanged." },
+      },
+      required: ["index"],
+    },
+  },
+  {
+    name: "remove_video_include",
+    description: "Delete a What Each Video Includes line by its position.",
     input_schema: {
       type: "object",
       properties: {

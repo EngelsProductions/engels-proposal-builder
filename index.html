@@ -348,6 +348,14 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
     </div>
 
     <div class="grp">
+      <h4>What each video includes</h4>
+      <label class="f">Intro line (optional)<textarea id="i-incintro"></textarea></label>
+      <div id="inc-list"></div>
+      <button class="btn ghost" id="add-inc">+ Add line</button>
+      <p class="hint">Drag the grip to reorder. Prints as the light-blue box under the section bar. Tick “What Each Video Includes” above to include it.</p>
+    </div>
+
+    <div class="grp">
       <h4>Portfolio</h4>
       <label class="f">Intro line<textarea id="i-portintro">A selection of relevant work for this project:</textarea></label>
       <label class="f">Link URL<input type="text" id="i-porturl" placeholder="https://…"></label>
@@ -539,6 +547,13 @@ const DEFAULT_KEYASPECTS = [
   {k:'Style',        v:'Cinematic, considered coverage that reflects the brand.'},
   {k:'Deliverables', v:'Edited films delivered in formats ready for social and web.'},
 ];
+// the lines printed in the "What Each Video Includes" callout
+const DEFAULT_INCLUDES = [
+  {k:'Pre-Production',  v:'Planning and shot-list prep ahead of every shoot.'},
+  {k:'Production',      v:'On-location filming with professional audio, lighting and a two-camera setup where applicable.'},
+  {k:'Post-Production', v:'Full edit with colour grade, music and titles.'},
+  {k:'Revisions',       v:'Two rounds included, delivered in formats ready for social and web.'},
+];
 const DEFAULT_QUOTEITEMS = [
   {cat:'Pre-Production',       desc:'Planning, shot-list and scheduling',        rate:550, days:1},
   {cat:'Creative Development', desc:'Concept and creative direction',            rate:550, days:1},
@@ -577,6 +592,7 @@ const HEADERS = {about:'About This Partnership', includes:'What Each Video Inclu
   scope:'Monthly Retainer Options', quote:'Project Quote', options:'Quote Options', rates:'Additional Day Rates',
   terms:'Key Terms & Conditions', retainer:'Ongoing Retainer', next:'Next Steps'};
 let keyAspects = DEFAULT_KEYASPECTS.map(a=>({...a}));
+let includeItems = DEFAULT_INCLUDES.map(a=>({...a}));
 let quoteItems = DEFAULT_QUOTEITEMS.map(a=>({...a}));
 let retTiers = DEFAULT_RETTIERS.map(t=>({...t}));   // monthly retainer columns
 let retAdhocOn = true;                              // show the Ad Hoc comparison column
@@ -1232,6 +1248,27 @@ function renderKeyAspects(){
   makeDraggable(w, keyAspects, renderKeyAspects);
 }
 
+// ---- what each video includes (editable list) ----
+document.getElementById('add-inc').onclick=()=>{
+  includeItems.push({k:'New line',v:'Describe what this covers.'});
+  renderIncludes();render();
+};
+function renderIncludes(){
+  const w=document.getElementById('inc-list'); w.innerHTML='';
+  includeItems.forEach((a,i)=>{
+    const d=document.createElement('div'); d.className='customsec';
+    d.innerHTML=`<span class="grip" title="drag to reorder">⠿</span><span class="x" title="remove">✕</span>
+      <label class="f">Label<input type="text" value="${(a.k||'').replace(/"/g,'&quot;')}"></label>
+      <label class="f">Description<textarea>${a.v}</textarea></label>`;
+    d.querySelector('.x').onclick=()=>{includeItems.splice(i,1);renderIncludes();render();};
+    const [ti,ta]=d.querySelectorAll('input,textarea');
+    ti.oninput=e=>{a.k=e.target.value;render();};
+    ta.oninput=e=>{a.v=e.target.value;render();};
+    w.appendChild(d);
+  });
+  makeDraggable(w, includeItems, renderIncludes);
+}
+
 // ---- monthly retainer tiers (editable columns) ----
 const MAX_RET_COLS = 4;   // Ad Hoc + tiers must fit across the page (matches Quote Options)
 function retColCount(){ return (retAdhocOn?1:0)+retTiers.length; }
@@ -1657,11 +1694,9 @@ function secHTML(id){
         ${keyAspects.map(a=>`<p><span class="k">${esc(a.k)}:</span> ${esc(a.v)}</p>`).join('')}
       </div>`;
    case 'includes': return `<div class="bar mt">WHAT EACH VIDEO INCLUDES</div>
+      ${val('i-incintro').trim()?`<p>${esc(val('i-incintro'))}</p>`:''}
       <div class="callout">
-        <p><span class="k">Pre-Production:</span> Planning and shot-list prep ahead of every shoot.</p>
-        <p><span class="k">Production:</span> On-location filming with professional audio, lighting and a two-camera setup where applicable.</p>
-        <p><span class="k">Post-Production:</span> Full edit with colour grade, music and titles.</p>
-        <p><span class="k">Revisions:</span> Two rounds included, delivered in formats ready for social and web.</p>
+        ${includeItems.map(a=>`<p><span class="k">${esc(a.k)}:</span> ${esc(a.v)}</p>`).join('')}
       </div>`;
    case 'portfolio': { const raw=val('i-porturl').trim(); const label=esc(val('i-portlabel').trim()||'View the portfolio');
       // a URL without a scheme becomes a broken relative link in the PDF — default it to https
@@ -1983,7 +2018,7 @@ function availablePageHeight(){
 }
 
 // ================= DRAFTS — saved to this browser =================
-const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-opt-pvlabel','i-signoff',
+const INPUT_IDS=['i-client','i-title','i-date','i-version','i-lead','i-about','i-keyintro','i-incintro','i-optintro','i-quoteintro','i-retainer','i-next','i-portintro','i-porturl','i-portlabel','i-retlabel','p-adhoc','r-dop','r-ed','i-disc-label','i-disc-type','i-disc-val','i-optdisc-label','i-optdisc-type','i-optdisc-val','i-quote-totlabel','i-opt-totlabel','i-opt-pvlabel','i-signoff',
   'i-quote-sublabel','i-opt-sublabel','i-ret-sublabel','i-ret-totlabel','i-kalead'];
 const DKEY='ep_drafts_v1', CKEY='ep_current_v1';
 let drafts=[], currentId=null, saveTimer=null;
@@ -1993,7 +2028,8 @@ function snapshot(){
   const inputs={}; INPUT_IDS.forEach(id=>inputs[id]=val(id));
   const toggles={}, breaks={}; SECTIONS.forEach(s=>{ toggles[s.id]=s.on; if(s.brk) breaks[s.id]=true; });
   return {ov:2, inputs, toggles, breaks, order:[...order], customs:clone(customs),
-          keyAspects:clone(keyAspects), aboutPhotos:clone(aboutPhotos), quoteItems:clone(quoteItems),
+          keyAspects:clone(keyAspects), includeItems:clone(includeItems),
+          aboutPhotos:clone(aboutPhotos), quoteItems:clone(quoteItems),
           retTiers:clone(retTiers), retAdhocOn,
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
           optLabels:clone(optLabels), optPerVid, optVids:clone(optVids),
@@ -2022,6 +2058,9 @@ function applyState(st){
     order.splice(insertAt,0,s.id);
   });
   keyAspects = Array.isArray(st.keyAspects) ? clone(st.keyAspects) : DEFAULT_KEYASPECTS.map(a=>({...a}));
+  // the includes lines used to be hard-coded; a draft saved before they became editable gets
+  // the wording it was printing rather than whatever the last-loaded draft left behind
+  includeItems = Array.isArray(st.includeItems) ? clone(st.includeItems) : DEFAULT_INCLUDES.map(a=>({...a}));
   aboutPhotos = Array.isArray(st.aboutPhotos) ? clone(st.aboutPhotos) : [];
   quoteItems = Array.isArray(st.quoteItems) ? clone(st.quoteItems) : DEFAULT_QUOTEITEMS.map(a=>({...a}));
   // retainer tiers: new drafts carry retTiers; older ones are migrated from the fixed A/B inputs
@@ -2046,6 +2085,8 @@ function applyState(st){
   // the key-aspects lead-in used to be hard-coded; a draft saved before it became a field
   // must get the wording it was printing, not whatever the last-loaded draft left behind
   if(!(st.inputs && 'i-kalead' in st.inputs)) document.getElementById('i-kalead').value='Key aspects of this project:';
+  // the includes intro arrived with the editable list and prints nothing by default
+  if(!(st.inputs && 'i-incintro' in st.inputs)) document.getElementById('i-incintro').value='';
   if(!(st.inputs && 'i-opt-pvlabel' in st.inputs)) document.getElementById('i-opt-pvlabel').value='Price per video';
   if(!(st.inputs && 'i-signoff' in st.inputs)) document.getElementById('i-signoff').value=SIGNOFFS[0];
   optTiers = Array.isArray(st.optTiers) ? st.optTiers.filter(t=>TIER_LADDER.includes(t)) : DEFAULT_OPTTIERS.slice();
@@ -2074,7 +2115,7 @@ function applyState(st){
   coverSrc = coverIsDefault ? COVER_DEFAULT : (st.coverSrc||COVER_DEFAULT);
   document.getElementById('i-cover').value='';
   syncAdhocField();
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderIncludes(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms(); render();
   refreshCover(); ensureReflections();
 }
 function loadStore(){
@@ -2297,7 +2338,7 @@ if(drafts.length){
   currentId=cur.id; applyState(cur.state);
 }else{
   syncAdhocField(); syncCustomSections();
-  renderToggles(); renderCustoms(); renderKeyAspects(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
+  renderToggles(); renderCustoms(); renderKeyAspects(); renderIncludes(); renderAboutPhotos(); renderRetTiers(); renderQuote(); renderOptions(); renderTerms(); renderRetTerms();
   document.getElementById('i-date').value=todayStr(); render(); refreshCover(); ensureReflections();
   newDraft(snapshot(), val('i-client')||'Untitled proposal');
 }
@@ -2327,6 +2368,7 @@ const AI_FIELDS = {
   client:'i-client', title:'i-title', date:'i-date', version:'i-version',
   opening_line:'i-lead', about_body:'i-about',
   key_aspects_lead_in:'i-kalead', key_aspects_intro:'i-keyintro',
+  video_includes_intro:'i-incintro',
   quote_options_intro:'i-optintro', project_quote_intro:'i-quoteintro',
   retainer_note:'i-retainer', next_steps:'i-next', portfolio_intro:'i-portintro',
   portfolio_url:'i-porturl', portfolio_link_label:'i-portlabel',
@@ -2348,6 +2390,7 @@ function aiExpect(actual, expected, what){
 // the lists the assistant may reorder, and how to redraw each one
 const AI_LISTS = {
   key_aspects:                 ()=>[keyAspects,    renderKeyAspects],
+  video_includes:              ()=>[includeItems,  renderIncludes],
   key_terms:                   ()=>[terms,         renderTerms],
   retainer_terms:              ()=>[retainerTerms, renderRetTerms],
   project_quote_items:         ()=>[quoteItems,    renderQuote],
@@ -2383,6 +2426,7 @@ const AI_TARGET = {
   add_quote_item:'quote', update_quote_item:'quote', remove_quote_item:'quote',
   add_option_row:'options', update_option_row:'options', remove_option_row:'options',
   add_key_aspect:'keyaspects', update_key_aspect:'keyaspects', remove_key_aspect:'keyaspects',
+  add_video_include:'includes', update_video_include:'includes', remove_video_include:'includes',
   add_term:'terms', update_term:'terms', remove_term:'terms',
   update_retainer_tier:'scope', add_retainer_tier:'scope', remove_retainer_tier:'scope',
   toggle_option_column:'options', set_option_column_title:'options',
@@ -2400,6 +2444,7 @@ function aiState(){
     sections_hidden: SECTIONS.filter(s=>!s.on).map(s=>s.custom?s.name:s.id),
     // every list entry carries its own index, so a position never has to be counted out
     key_aspects: keyAspects.map((a,i)=>({index:i, label:a.k, text:a.v})),
+    video_includes: includeItems.map((a,i)=>({index:i, label:a.k, text:a.v})),
     project_quote_items: quoteItems.map((it,i)=>({index:i, category:it.cat, description:it.desc, day_rate:it.rate, days:it.days})),
     project_quote_explanations: quoteNotes.map((n,i)=>({index:i, label:n.label, text:n.text})),
     // shown under the titles that print, so the assistant names columns the way the proposal does
@@ -2474,6 +2519,20 @@ const AI_APPLY = {
     if(!keyAspects[index]) throw Error('No key aspect at position '+index);
     aiExpect(keyAspects[index].k, expect, 'key aspect');
     keyAspects.splice(index,1); renderKeyAspects(); return 'Removed a key aspect';
+  },
+  add_video_include({label,text}){
+    includeItems.push({k:label,v:text}); renderIncludes(); return 'Added a line to What Each Video Includes';
+  },
+  update_video_include({index,label,text,expect}){
+    const a=includeItems[index]; if(!a) throw Error('No line at position '+index);
+    aiExpect(a.k, expect, 'line');
+    if(label!==undefined) a.k=label; if(text!==undefined) a.v=text;
+    renderIncludes(); return 'Rewrote a line in What Each Video Includes';
+  },
+  remove_video_include({index,expect}){
+    if(!includeItems[index]) throw Error('No line at position '+index);
+    aiExpect(includeItems[index].k, expect, 'line');
+    includeItems.splice(index,1); renderIncludes(); return 'Removed a line from What Each Video Includes';
   },
   add_custom_section({title,body}){
     const c={id:'c'+uid(), title, blocks:blocksFromText(body)};
