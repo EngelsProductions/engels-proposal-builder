@@ -434,6 +434,9 @@ h3.sub{font-size:11pt;font-weight:600;color:var(--navy);margin:2pt 0 7pt;}
         <label class="f" style="max-width:74px;flex:0 0 74px;">Type<select id="i-optdisc-type"><option value="gbp">£</option><option value="pct">%</option></select></label>
         <label class="f" style="max-width:88px;flex:0 0 88px;">Amount<input type="number" id="i-optdisc-val" value="0"></label>
       </div>
+      <label class="f" style="margin:11px 0 5px;">Per column — leave blank to use the amount above, 0 for no discount</label>
+      <div id="opt-discs"></div>
+      <p class="hint" style="margin-top:2px;">One column can be discounted more heavily than another. A column on 0 shows a dash. With “%” chosen, the row prints its percentage beside the label only while every column shares it.</p>
       <label class="f" style="margin:14px 0 5px;">Extras (optional) — added under the total, e.g. travel expenses</label>
       <div id="opt-extras"></div>
       <button class="btn ghost" id="add-optextra">+ Add extra</button>
@@ -607,6 +610,10 @@ let optTotals = {};  // manual per-tier total override (blank = auto-sum of nume
 let optLabels = {};  // per-tier column title override (blank = the ladder name itself)
 let optPerVid = false;     // show a price-per-video row beneath the Quote Options total
 let optVids = {};    // videos included per tier — divides that column's total
+// per-tier discount override. The Discount row takes one type (£ or %) and a default amount;
+// a figure typed against a column is used instead, so tiers can be discounted differently.
+// Blank falls back to the default, exactly as a blank column total falls back to the auto-sum.
+let optDiscs = {};
 // Extras are charges added under a pricing table's total — travel, accommodation, anything
 // scoped after the line items. Adding one demotes the blue total row to a subtotal (the light
 // "rate" style already used for it) and prints a fresh blue banner underneath carrying the
@@ -1338,7 +1345,7 @@ document.getElementById('chk-optpervid').onchange=e=>{ optPerVid=e.target.checke
 // the value editors caption each box with the column's printed title, so retitling a column
 // renames its boxes too. Only the title editor stays captioned by the ladder rung.
 function syncColCaptions(){
-  ['opt-rows','opt-totals','opt-vids','opt-extras'].forEach(id=>{
+  ['opt-rows','opt-totals','opt-discs','opt-vids','opt-extras'].forEach(id=>{
     const w=document.getElementById(id); if(!w) return;
     w.querySelectorAll('label.f > input[data-t]').forEach(inp=>{
       const cap=inp.parentElement.firstChild;
@@ -1397,6 +1404,15 @@ function renderOptions(){
       const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(colLabel(c))}<input type="number" class="otot" data-t="${esc(c)}" value="${isNum(optTotals[c])?optTotals[c]:''}" placeholder="${gbp(optTotal(c)).replace('£','')}"></label>`).join('');
       tw2.innerHTML=`<div class="row" style="flex-wrap:wrap;gap:7px;">${cells}</div>`;
       tw2.querySelectorAll('.otot').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value.trim(); if(v==='') delete optTotals[t]; else optTotals[t]=parseFloat(v.replace(/[£,]/g,''))||0; render(); }; });
+    }
+  }
+  // per-tier discount override (blank = the single amount above, which is the placeholder)
+  const dw=document.getElementById('opt-discs');
+  if(dw){ dw.innerHTML=''; const cols=optCols();
+    if(cols.length){
+      const cells=cols.map(c=>`<label class="f" style="flex:1;min-width:58px;margin-bottom:0;">${esc(colLabel(c))}<input type="number" class="odisc" data-t="${esc(c)}" value="${isNum(optDiscs[c])?optDiscs[c]:''}" placeholder="${num('i-optdisc-val')||0}"></label>`).join('');
+      dw.innerHTML=`<div class="row" style="flex-wrap:wrap;gap:7px;">${cells}</div>`;
+      dw.querySelectorAll('.odisc').forEach(inp=>{ inp.oninput=e=>{ const t=e.target.dataset.t, v=e.target.value.trim(); if(v==='') delete optDiscs[t]; else optDiscs[t]=parseFloat(v.replace(/[£,%]/g,''))||0; render(); }; });
     }
   }
   // videos included per tier, which the price-per-video row divides that column's total by
@@ -1805,8 +1821,13 @@ function quoteParts(){
 // the Quote Options section broken into its pieces, so it can be rendered whole or split across pages
 function optionsParts(){
   const cols=optCols();
-  const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val'), hasDisc=dval>0;
-  const discFor=c=>dtype==='pct'?optTotal(c)*dval/100:dval;
+  const dtype=val('i-optdisc-type'), dval=num('i-optdisc-val');
+  // the figure typed against a column wins; blank falls back to the single amount above
+  const discRate=c=>isNum(optDiscs[c])?+optDiscs[c]:dval;
+  const discFor=c=>{ const r=discRate(c); return r>0 ? (dtype==='pct'?optTotal(c)*r/100:r) : 0; };
+  const hasDisc=cols.some(c=>discRate(c)>0);
+  // a percentage is only true of the row as a whole while every column is on the same one
+  const uniformPct = dtype==='pct' && hasDisc && cols.every(c=>discRate(c)===discRate(cols[0]));
   const grandFor=c=>Math.max(0, optTotal(c)-discFor(c));
   // net is that column after any discount; with extras under it, net becomes the subtotal
   const netFor=c=>hasDisc?grandFor(c):optTotal(c);
@@ -1824,7 +1845,7 @@ function optionsParts(){
     rows: optRows.map(r=>`<tr><th class="rh">${esc(r.cat)}</th>${cols.map(c=>`<td class="c">${cellDisplay(r.vals[c])}</td>`).join('')}</tr>`),
     // subtotal / discount / extras / total always travel together as one indivisible group
     summary: (hasDisc?`<tr class="rate"><th class="rh">Subtotal</th>${cols.map(c=>`<td class="c">${gbp(optTotal(c))}</td>`).join('')}</tr>
-        <tr><th class="rh">${esc(val('i-optdisc-label'))}${dtype==='pct'?` (${dval}%)`:''}</th>${cols.map(c=>`<td class="c save">−${gbp(discFor(c))}</td>`).join('')}</tr>`:'')
+        <tr><th class="rh">${esc(val('i-optdisc-label'))}${uniformPct?` (${discRate(cols[0])}%)`:''}</th>${cols.map(c=>`<td class="c${discFor(c)>0?' save':''}">${discFor(c)>0?'−'+gbp(discFor(c)):'—'}</td>`).join('')}</tr>`:'')
       + (extras.length?`<tr class="rate"><th class="rh">${esc(subLabel('i-opt-sublabel'))}</th>${cols.map(c=>`<td class="c">${gbp(netFor(c))}</td>`).join('')}</tr>`
         + extras.map(e=>`<tr><th class="rh">${esc(e.label)}</th>${cols.map(c=>`<td class="c">${cellDisplay(e.vals&&e.vals[c])}</td>`).join('')}</tr>`).join(''):'')
       + `<tr class="total"><td>${esc(totLabel('i-opt-totlabel'))}</td>${cols.map(c=>`<td class="c">${gbp(finalFor(c))}</td>`).join('')}</tr>`
@@ -2032,7 +2053,7 @@ function snapshot(){
           aboutPhotos:clone(aboutPhotos), quoteItems:clone(quoteItems),
           retTiers:clone(retTiers), retAdhocOn,
           optTiers:[...optTiers], optRows:clone(optRows), optNotes:clone(optNotes), optTotals:clone(optTotals),
-          optLabels:clone(optLabels), optPerVid, optVids:clone(optVids),
+          optLabels:clone(optLabels), optPerVid, optVids:clone(optVids), optDiscs:clone(optDiscs),
           quoteNotes:clone(quoteNotes), showQuoteDays, optEqCols,
           quoteExtras:clone(quoteExtras), optExtras:clone(optExtras), retExtras:clone(retExtras),
           terms:clone(terms), retainerTerms:clone(retainerTerms), chkRetTerms,
@@ -2095,6 +2116,8 @@ function applyState(st){
   optTotals = (st.optTotals && typeof st.optTotals==='object') ? {...st.optTotals} : {};
   optLabels = (st.optLabels && typeof st.optLabels==='object') ? {...st.optLabels} : {};
   optVids = (st.optVids && typeof st.optVids==='object') ? {...st.optVids} : {};
+  // a draft saved before per-column discounts has none, so every column takes the single amount
+  optDiscs = (st.optDiscs && typeof st.optDiscs==='object') ? {...st.optDiscs} : {};
   optPerVid = !!st.optPerVid;
   document.getElementById('chk-optpervid').checked = optPerVid;
   optNotes = Array.isArray(st.optNotes) ? clone(st.optNotes) : [];
@@ -2299,6 +2322,11 @@ const SELECT_IDS=['i-disc-type','i-optdisc-type','i-signoff'];
 INPUT_IDS.filter(id=>!SELECT_IDS.includes(id)).forEach(id=>{
   const el=document.getElementById(id); if(el) el.addEventListener('input',render);
 });
+// the per-column discount boxes show the single amount as their placeholder — patch it in place
+// as that amount is typed, rather than redrawing the editor and taking the caret with it
+document.getElementById('i-optdisc-val').addEventListener('input',()=>{
+  document.querySelectorAll('#opt-discs .odisc').forEach(inp=>{ inp.placeholder = num('i-optdisc-val')||0; });
+});
 // ⌘B / Ctrl+B in any panel text field wraps the selection in **bold** markers
 document.querySelector('.panel').addEventListener('keydown',e=>{
   if(!(e.metaKey||e.ctrlKey) || (e.key||'').toLowerCase()!=='b') return;
@@ -2430,7 +2458,8 @@ const AI_TARGET = {
   add_term:'terms', update_term:'terms', remove_term:'terms',
   update_retainer_tier:'scope', add_retainer_tier:'scope', remove_retainer_tier:'scope',
   toggle_option_column:'options', set_option_column_title:'options',
-  set_option_column_total:'options', set_price_per_video:'options'
+  set_option_column_total:'options', set_price_per_video:'options',
+  set_option_column_discount:'options'
 };
 
 // what the assistant is shown: the proposal's words and numbers, never the embedded photos
@@ -2457,7 +2486,10 @@ function aiState(){
     quote_options_explanations: optNotes.map((n,i)=>({index:i, label:n.label, text:n.text})),
     discounts: {
       quote:   {label:val('i-disc-label'),    type:val('i-disc-type'),    amount:num('i-disc-val')},
-      options: {label:val('i-optdisc-label'), type:val('i-optdisc-type'), amount:num('i-optdisc-val')}
+      // the options discount takes one label and type; amount is the default, and a column
+      // listed here is discounted by its own figure instead
+      options: {label:val('i-optdisc-label'), type:val('i-optdisc-type'), amount:num('i-optdisc-val'),
+        per_column: Object.fromEntries(optCols().filter(c=>isNum(optDiscs[c])).map(c=>[colLabel(c), +optDiscs[c]]))}
     },
     // read-only context: charges added under each table's total. There is no tool for these, so
     // the assistant can see the figures add up but can't edit them — say so if asked to change one.
@@ -2672,6 +2704,11 @@ const AI_APPLY = {
     if(!optTiers.includes(tier)) throw Error('Left alone: the '+tier+' column is not showing.');
     if(total===null||total===undefined||total==='') delete optTotals[tier]; else optTotals[tier]=+total;
     renderOptions(); return 'Set the '+colLabel(tier)+' total';
+  },
+  set_option_column_discount({tier,amount}){
+    if(!optTiers.includes(tier)) throw Error('Left alone: the '+tier+' column is not showing.');
+    if(amount===null||amount===undefined||amount==='') delete optDiscs[tier]; else optDiscs[tier]=+amount;
+    renderOptions(); return 'Set the '+colLabel(tier)+' discount';
   },
   set_price_per_video({on,videos,label}){
     if(on!==undefined){ optPerVid=!!on; document.getElementById('chk-optpervid').checked=optPerVid; }

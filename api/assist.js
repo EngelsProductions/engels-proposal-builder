@@ -561,6 +561,26 @@ const TOOLS = [
     },
   },
   {
+    name: "set_option_column_discount",
+    description:
+      "Give one Quote Options column its own discount, instead of the single amount set for the " +
+      "whole row, or clear it so that column goes back to the shared amount. The row's type " +
+      "(pounds or percent) and label are shared — set those with set_discount.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tier: { type: "string", enum: TIERS },
+        amount: {
+          type: ["number", "null"],
+          description:
+            "Pounds, or percent when the row's type is 'pct'. 0 leaves that column undiscounted; " +
+            "null goes back to the shared amount.",
+        },
+      },
+      required: ["tier", "amount"],
+    },
+  },
+  {
     name: "set_price_per_video",
     description:
       "Control the price-per-video row under the Quote Options total. It divides each column's " +
@@ -629,7 +649,8 @@ identified by its rung, never by what it prints: quote_options_columns gives you
 "name". Retitling a column with set_option_column_title changes only the printed name; its figures,
 its total and its place in the order are untouched. Under the total there can be a price-per-video
 row (set_price_per_video), which divides each column's discounted total by the videos that column
-includes. Both tables take a discount through set_discount.
+includes. Both tables take a discount through set_discount, and a Quote Options column can be
+discounted differently from the rest with set_option_column_discount.
 
 You can also arrange the document: toggle_section and toggle_custom_section include or drop a section,
 move_section and move_item reorder, set_page_break starts a section on a fresh page, and set_option
